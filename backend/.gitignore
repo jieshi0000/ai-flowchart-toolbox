@@ -1,0 +1,32 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# .env 可含 ENC(...) 密文提交；仅忽略本机私有覆盖（见 AGENTS.md 密钥管理）
+/.env.local
+/.env.*.local
+
+# Virtual environments
+.venv
+venv/
+
+# Logs
+logs/
+
+# IDE
+.idea/
+.vscode/
+.cursor/
+
+# Testing
+.pytest_cache/
+.coverage
+
+# OS
+.DS_Store

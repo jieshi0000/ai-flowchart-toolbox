@@ -1,0 +1,86 @@
+# 本地开发中间件：PostgreSQL + Redis + MinIO
+# 用途：本地启动时依靠 docker-compose.dev.yml 提供数据库与存储服务，
+#       生产部署时连接外部 infra-net 中的中间件（docker-compose.yml 不含数据库 service）。
+#
+# 共享网络：使用 infra-net（与线上一致），便于本地容器间互访；
+#           若网络尚未创建，docker compose up 会自动提示，先 docker network create infra-net 即可。
+#
+# 端口映射到宿主机 localhost，后端本地进程（非容器内）直连 localhost 对应端口。
+#
+# 项目凭据（口令由 setup.sh 替换，与 .env.example / backend/.env 一致）：
+#   PG 超管        app / app_123456
+#   业务库          flowchart_toolbox_db
+#   业务用户        flowchart_toolbox_user / flowchart_toolbox_123456
+#   Redis           :6379 口令 redis_123456
+#   MinIO           minio / minio_123456
+#
+# PG 首次启动时自动执行 init.sql，创建业务库与业务用户，
+# 确保本地开发与生产部署的数据库用户/名称/密码完全一致。
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: app_123456
+      POSTGRES_DB: flowchart_toolbox_db
+      TZ: Asia/Shanghai
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d flowchart_toolbox_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: redis
+    restart: unless-stopped
+    environment:
+      TZ: Asia/Shanghai
+    command: redis-server --appendonly yes --requirepass redis_123456
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_123456", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    container_name: minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio
+      MINIO_ROOT_PASSWORD: minio_123456
+      TZ: Asia/Shanghai
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pg_data:
+  redis_data:
+  minio_data:
+
+networks:
+  default:
+    name: ${INFRA_NET:-infra-net}
+    external: true

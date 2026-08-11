@@ -1,0 +1,28 @@
+services:
+  app:
+    build: .
+    image: ${APP_NAME}:${APP_TAG:-latest}
+    container_name: ${APP_NAME}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      - TZ=Asia/Shanghai
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging:
+      driver: json-file
+      options:
+        max-size: 100m
+        max-file: "5"
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+
+networks:
+  default:
+    name: ${INFRA_NET:-infra-net}
+    external: true

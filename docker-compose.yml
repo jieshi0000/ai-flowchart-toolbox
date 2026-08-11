@@ -1,0 +1,43 @@
+# 全栈部署（backend + frontend），连接外部 infra-net
+services:
+  flowchart-toolbox-server:
+    build: ./backend
+    image: flowchart-toolbox-server:${APP_TAG:-latest}
+    container_name: flowchart-toolbox-server
+    restart: unless-stopped
+    # 根 .env：compose/端口/网络；backend/.env：应用配置（Python 嵌套键 / Java JDBC 等）
+    # 后者先加载，前者同名键覆盖（便于根级统一改 APP_NAME、口令等）
+    env_file:
+      - ./backend/.env
+      - .env
+    environment:
+      - TZ=Asia/Shanghai
+    ports:
+      - "${BACKEND_PORT:-10105}:8000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    logging:
+      driver: json-file
+      options:
+        max-size: 100m
+        max-file: "5"
+
+  flowchart-toolbox-frontend:
+    build: ./frontend
+    image: flowchart-toolbox-frontend:${APP_TAG:-latest}
+    container_name: flowchart-toolbox-frontend
+    restart: unless-stopped
+    depends_on:
+      - flowchart-toolbox-server
+    ports:
+      - "${FRONTEND_PORT:-20105}:80"
+    logging:
+      driver: json-file
+      options:
+        max-size: 100m
+        max-file: "5"
+
+networks:
+  default:
+    name: ${INFRA_NET:-infra-net}
+    external: true

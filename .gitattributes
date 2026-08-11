@@ -1,0 +1,12 @@
+# 统一使用 LF 换行符
+* text eol=lf
+
+# 二进制文件不转换
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.jar binary
+*.class binary

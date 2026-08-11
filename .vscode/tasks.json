@@ -1,0 +1,66 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "backend:dev",
+      "detail": "FastAPI + APP_ENV=local（.env + .env.local，含 auto_migrate）",
+      "type": "shell",
+      "command": "uv run python -m src.app.main",
+      "options": {
+        "cwd": "${workspaceFolder}/backend",
+        "env": {
+          "APP_ENV": "local"
+        }
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "backend",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "(Uvicorn running|Application startup)"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "dev"
+      }
+    },
+    {
+      "label": "frontend:dev",
+      "detail": "Vite development（.env.development）",
+      "type": "shell",
+      "command": "pnpm -F @vben/my-app run dev",
+      "options": {
+        "cwd": "${workspaceFolder}/frontend"
+      },
+      "isBackground": true,
+      "problemMatcher": {
+        "owner": "frontend",
+        "pattern": { "regexp": "^$" },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "(Local:|ready in)"
+        }
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "group": "dev"
+      }
+    },
+    {
+      "label": "fullstack:dev",
+      "detail": "并行启动后端 + 前端（local）",
+      "dependsOn": ["backend:dev", "frontend:dev"],
+      "dependsOrder": "parallel",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always"
+      }
+    }
+  ]
+}

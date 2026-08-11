@@ -1,0 +1,46 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Backend (local)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "src.app.main",
+      "cwd": "${workspaceFolder}/backend",
+      "python": "${workspaceFolder}/backend/.venv/bin/python",
+      "env": {
+        "APP_ENV": "local",
+        "APP__DEBUG": "false"
+      },
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "dev",
+        "order": 1
+      }
+    },
+    {
+      "name": "Frontend (dev)",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["-F", "@vben/my-app", "run", "dev"],
+      "cwd": "${workspaceFolder}/frontend",
+      "console": "integratedTerminal",
+      "presentation": {
+        "group": "dev",
+        "order": 2
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Full Stack (local)",
+      "configurations": ["Backend (local)", "Frontend (dev)"],
+      "stopAll": true,
+      "presentation": {
+        "group": "dev",
+        "order": 0
+      }
+    }
+  ]
+}
