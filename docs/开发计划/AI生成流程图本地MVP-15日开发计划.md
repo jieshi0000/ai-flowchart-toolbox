@@ -4,6 +4,7 @@
 
 基于当前 `test` 分支开发，不修改 `master`，交付一个本地可部署运行的 AI 流程图应用：
 
+- 当前真实生成默认使用 DeepSeek 官方 API，默认模型为 `deepseek-v4-flash`，同时适配 Chat Completions 和 Responses API。
 - 支持 Anthropic Messages API。
 - 支持 OpenAI Chat Completions API。
 - 支持 OpenAI Responses API。
@@ -115,8 +116,8 @@ git push origin feat/dXX-short-name
 | D03 `feat/d03-diagram-engine` | `feat: 实现DiagramDocument校验器`；`feat: 实现安全Mermaid编译器`；`test: 增加流程图安全与边界测试` | 六类节点、TB/LR、循环边、节点与连线限制、脚本转义测试通过。 |
 | D04 `feat/d04-provider-core` | `feat: 实现供应商配置清单加载`；`feat: 实现Provider注册中心和统一协议`；`feat: 实现统一httpx传输层`；`feat: 提供供应商公开列表接口` | 配置校验、能力筛选、超时和日志脱敏测试通过；响应不暴露 Key 和 Base URL。 |
 | D05 `feat/d05-anthropic-provider` | `feat: 实现Anthropic Messages适配器`；`feat: 实现Anthropic结构化输出约束`；`feat: 实现Anthropic响应解析和错误映射` | 成功、401、429、5xx、超时、内容拒绝、空结果和非法 JSON 契约测试通过。 |
-| D06 `feat/d06-openai-chat-provider` | `feat: 实现OpenAI Chat Completions适配器`；`feat: 实现Chat结构化输出`；`feat: 实现严格JSON提示词兜底`；`test: 增加OpenAI Chat契约测试` | OpenAI 官方地址和兼容 Base URL 均可使用同一适配器。 |
-| D07 `feat/d07-openai-responses-routing` | `feat: 实现OpenAI Responses适配器`；`feat: 支持第三方中转站配置`；`feat: 实现自动优先级路由`；`feat: 实现用户手动模型选择和安全降级` | Chat、Responses、中转站、自动路由和有限降级测试通过。 |
+| D06 `feat/d06-openai-chat-provider` | `feat: 实现OpenAI Chat Completions适配器`；`feat: 适配DeepSeek Chat Completions请求与响应`；`feat: 实现DeepSeek JSON模式和严格JSON提示词`；`test: 增加OpenAI Chat与DeepSeek Chat契约测试` | DeepSeek `POST /chat/completions` 使用 `deepseek-v4-flash`，同时发送 `response_format: {"type":"json_object"}` 和明确 JSON 指令；官方地址、OpenAI 官方地址和兼容 Base URL 均可复用同一适配器。 |
+| D07 `feat/d07-openai-responses-routing` | `feat: 实现OpenAI Responses适配器`；`feat: 适配DeepSeek无状态Responses API`；`feat: 支持第三方中转站配置`；`feat: 实现自动优先级路由`；`feat: 实现用户手动模型选择和安全降级` | DeepSeek `POST /responses` 使用 `deepseek-v4-flash` 和 `text.format` 结构化输出，不发送官方未支持的状态参数；Chat、Responses、中转站、自动路由和有限降级测试通过。 |
 | D08 `feat/d08-task-api` | `feat: 实现生成任务创建和查询`；`feat: 实现任务幂等控制`；`feat: 实现任务取消和重试`；`feat: 实现用户资源隔离和业务错误码` | 创建接口 1 秒内返回 taskId；重复提交不重复调用供应商；非本人访问被拒绝。 |
 | D09 `feat/d09-celery-engine` | `feat: 接入Celery Worker和Beat`；`feat: 实现本地任务状态机`；`feat: 实现供应商调用任务`；`feat: 实现超时取消重试和补偿扫描` | 成功、失败、超时、取消均能进入确定终态；真实调用失败不切换 Mock。 |
 | D10 `feat/d10-task-events` | `feat: 实现Redis任务事件发布`；`feat: 实现任务SSE接口`；`feat: 实现前端SSE和轮询降级`；`feat: 实现任务刷新恢复和离开确认` | SSE 断开后每 2 秒轮询；刷新不重复提交；任务结束后停止监听。 |
@@ -124,7 +125,7 @@ git push origin feat/dXX-short-name
 | D12 `feat/d12-canvas-editor` | `feat: 实现React Flow六类节点`；`feat: 实现节点和连线编辑`；`feat: 实现dagre自动布局`；`feat: 实现撤销重做和脏状态`；`feat: 实现Mermaid实时同步` | 50 节点、100 连线内可正常拖拽、缩放、编辑、布局和撤销。 |
 | D13 `feat/d13-document-storage` | `feat: 实现文档查询和保存`；`feat: 实现文档版本乐观锁`；`feat: 实现MinIO存储适配器`；`feat: 实现Mermaid和JSON导出` | 保存后版本递增；版本冲突返回最新文档；导出文件具有用户归属和有效期。 |
 | D14 `feat/d14-render-security` | `feat: 构建Chromium导出Worker`；`feat: 实现SVG导出`；`feat: 实现PNG导出`；`feat: 实现鉴权下载和过期清理`；`feat: 预留广场身份额度和用量接口` | 四类导出有效；非本人无法下载；过期文件被清理；本地模式不调用广场。 |
-| D15 `feat/d15-provider-integration` | `test: 完成Anthropic真实供应商联调`；`test: 完成OpenAI Chat真实联调`；`test: 完成OpenAI Responses真实联调`；`test: 完成第三方中转站真实联调`；每个问题分别使用 `fix(provider): ...` 提交；最后提交 `docs: 完善本地部署和供应商配置手册` | 四条真实短请求、完整生成链路、画布编辑、保存、刷新、取消、重试和四类导出全部通过。 |
+| D15 `feat/d15-provider-integration` | `test: 完成DeepSeek Chat Completions真实联调`；`test: 完成DeepSeek Responses真实联调`；`test: 完成DeepSeek完整生成链路验收`；每个问题分别使用 `fix(provider): ...` 提交；最后提交 `docs: 完善本地部署和供应商配置手册` | DeepSeek Chat、Responses 各完成一条真实短请求，默认链路使用 `deepseek-v4-flash`；画布编辑、保存、刷新、取消、重试和四类导出全部通过；其他 Provider 完成 Mock 契约测试，不作为本轮真实联调门槛。 |
 
 ## 四、固定接口与公共类型
 
@@ -169,6 +170,8 @@ GET  /api/flowchart/files/download?fileId=...
 - `direction` 只允许 `TB`、`LR`。
 - `detailLevel` 只允许 `concise`、`standard`、`detailed`。
 - `providerId` 为空时自动路由。
+- 前端模型选择器显示 Provider 的 `displayName`，提交时将对应值写入 `model`。
+- 同一模型存在多个协议配置时，前端按 `displayName` 合并为一个模型选项，并保持 `providerId` 为空，由后端按路由规则选择具体协议。
 - 用户指定 Provider 后，不得私自切换到其他 Provider。
 - 重试接口始终创建新任务和新幂等键。
 
@@ -276,6 +279,37 @@ backend/config/providers.local.json
 
 `providers.local.json` 必须加入 `.gitignore`，配置路径通过 `AI__PROVIDERS_FILE` 指定。
 
+当前默认真实 Provider 使用 DeepSeek 官方 API，并复用 `openai_compatible` 适配器。适配依据：
+
+- [DeepSeek Chat Completions API](https://api-docs.deepseek.com/zh-cn/api/create-chat-completion)
+- [DeepSeek Responses API](https://api-docs.deepseek.com/zh-cn/guides/responses_api)
+
+Chat Completions 配置：
+
+```text
+providerId: deepseek-official-chat
+displayName: deepseek-v4-flash
+adapter: openai_compatible
+protocol: openai_chat_completions
+baseUrl: https://api.deepseek.com
+model: deepseek-v4-flash
+apiKeyEnv: DEEPSEEK_API_KEY
+```
+
+Responses 配置：
+
+```text
+providerId: deepseek-official-responses
+displayName: deepseek-v4-flash
+adapter: openai_compatible
+protocol: openai_responses
+baseUrl: https://api.deepseek.com
+model: deepseek-v4-flash
+apiKeyEnv: DEEPSEEK_API_KEY
+```
+
+两个配置共用同一环境变量和前端显示名称，但分别执行 `POST /chat/completions` 和 `POST /responses`。`model`、启用状态和优先级仍由配置文件管理，不在业务代码中硬编码；当前默认模型固定为 `deepseek-v4-flash`。
+
 每个 Provider 固定字段：
 
 ```text
@@ -308,6 +342,13 @@ openai_responses
 
 API Key 只通过 `apiKeyEnv` 指向的环境变量读取。前端、数据库和公开配置文件不得保存 Key。
 
+字段展示规则：
+
+- `providerId` 是后端稳定唯一标识，用于路由、任务记录和接口传参，不在普通前端界面展示。
+- `displayName` 必须直接复用同一配置的 `model` 值，不维护另一套展示名称。
+- 修改 `model` 时必须同步修改 `displayName`；Provider 配置加载校验应拒绝两者不一致的配置。
+- 多个 Provider 配置使用同一个 `model` 时，公开列表可保留各自 `providerId`，前端模型选择器按 `displayName` 去重展示。
+
 ### 5.2 Provider 统一协议
 
 内部统一接口保留：
@@ -323,11 +364,16 @@ healthCheck
 
 - `submit` 返回统一 `ProviderSubmission`。
 - 本轮返回模式固定为 `sync`。
+- DeepSeek Chat 和 Responses 请求均固定使用 `stream: false`；前端 SSE 只传递本地任务事件，不直接透传供应商事件流。
 - `poll`、`cancel` 保留扩展接口，但不实现供应商原生异步任务。
 - 本地取消只保证任务不再保存或推进结果；已经发出的供应商 HTTP 请求采用尽力终止。
 
 ### 5.3 结构化输出
 
+- DeepSeek Chat Completions 请求使用 `response_format: {"type":"json_object"}`，并在 system 或 user 消息中明确要求只生成 JSON；缺少任一条件均视为实现错误。
+- DeepSeek Chat 只读取 `choices[0].message.content` 作为候选 JSON；`finish_reason="length"` 视为输出不完整，不保存文档。
+- DeepSeek Responses 请求使用 `text.format` JSON Schema 约束，解析最终 `output_text`；所有结果仍必须再次通过 Pydantic DiagramDocument 校验。
+- DeepSeek Responses 按官方无状态契约实现，不发送或依赖 `previous_response_id`、`conversation`、`store`、`background`、`metadata`、`include`、`prompt`、`truncation`、`context_management` 和 `stream_options`。
 - OpenAI Chat 优先使用原生 JSON Schema 结构化响应。
 - OpenAI Responses 优先使用 Responses 的结构化输出能力。
 - Anthropic 优先使用工具约束或等价结构化能力。
@@ -358,6 +404,7 @@ healthCheck
 - 使用 `@xyflow/react` 实现画布。
 - 使用 dagre 实现 TB/LR 自动布局。
 - 使用 Mermaid 进行只读源码预览。
+- 模型选择器显示 `displayName`；`providerId` 只作为内部值，不作为用户可见名称。
 - SSE 使用 `fetch` 流式读取，以便安全携带认证请求头。
 - `taskId`、`documentId` 使用应用命名空间保存到 `localStorage`。
 - 不把供应商 Key、Base URL 或 `providerRequestId` 保存到前端。
@@ -460,7 +507,7 @@ UsageReporter
 - Mermaid 类型映射与安全转义。
 - 三种 Provider 协议的请求映射。
 - 三种 Provider 协议的响应解析。
-- Provider 配置校验和路由。
+- Provider 配置校验和路由，包括 `displayName` 与 `model` 一致性校验。
 - 401、403、429、5xx、超时、空结果、非法 JSON。
 - 任务状态机、幂等、取消和重试。
 - 文档版本冲突。
@@ -470,6 +517,8 @@ UsageReporter
 
 使用 `httpx` Mock Transport，不访问真实网络，覆盖：
 
+- DeepSeek Chat Completions 的 `/chat/completions` 路径、Bearer 鉴权、`deepseek-v4-flash`、JSON 模式和 `finish_reason` 处理。
+- DeepSeek Responses 的 `/responses` 路径、Bearer 鉴权、`deepseek-v4-flash`、`text.format`、`output_text` 和无状态参数约束。
 - Anthropic Messages。
 - OpenAI Chat Completions。
 - OpenAI Responses。
@@ -498,7 +547,7 @@ UsageReporter
 
 - admin 登录。
 - 描述输入和模板填充。
-- Provider、模型选择。
+- Provider、模型选择；同名模型只展示一个选项，页面不显示 `providerId`。
 - 创建、取消和重试任务。
 - SSE 断开后的轮询。
 - 刷新后恢复任务和文档。
@@ -514,10 +563,10 @@ UsageReporter
 
 D15 在用户提供的未跟踪本地配置下执行：
 
-1. Anthropic Messages 真实短请求。
-2. OpenAI Chat Completions 真实短请求。
-3. OpenAI Responses 真实短请求。
-4. 至少一个第三方中转站真实短请求。
+1. DeepSeek Chat Completions 使用 `deepseek-v4-flash` 完成真实短请求。
+2. DeepSeek Responses 使用 `deepseek-v4-flash` 完成真实短请求。
+3. DeepSeek 官方 API 完成完整流程图生成链路。
+4. Anthropic、OpenAI Chat、OpenAI Responses 和第三方中转站只执行 Mock 契约测试，不要求本轮提供真实凭据或完成真实联调。
 
 要求：
 
@@ -525,7 +574,7 @@ D15 在用户提供的未跟踪本地配置下执行：
 - 限制最大输出 Token。
 - 不记录 Key、完整提示词或完整供应商响应。
 - 每条请求必须生成合法 DiagramDocument。
-- 若凭据、额度或供应商服务不可用，必须如实记录该协议未完成真实验收，不得用 Mock 冒充。
+- 若 DeepSeek 凭据、额度或服务不可用，必须如实记录真实验收未完成，不得用 Mock 冒充。
 
 ### 6.6 性能验收
 
@@ -575,8 +624,10 @@ D15 在用户提供的未跟踪本地配置下执行：
 - 每个需求完成后允许自动提交和推送每日功能分支。
 - 合入 `test` 仍需要用户单独确认。
 - 用户不会在聊天中发送任何 API Key。
-- 实施真实 OpenAI 调用前，需要单独确认复用现有 Key 还是创建新 Key。
-- Anthropic、OpenAI 和中转站凭据由用户写入未跟踪本地配置。
+- 当前真实生成固定使用 DeepSeek 官方 API，默认模型为 `deepseek-v4-flash`，模型值保持可配置。
+- DeepSeek 凭据由用户自行写入未跟踪的本地配置，环境变量名为 `DEEPSEEK_API_KEY`；Codex 不读取或回显其值。
+- Anthropic、OpenAI 和中转站适配能力继续实现，但本轮不要求配置真实凭据或完成真实调用。
+- 后续实施真实 OpenAI 调用前，需要单独确认复用现有 Key 还是创建新 Key。
 - 第三方中转站遵循标准 Bearer 鉴权和 OpenAI Chat、Responses 响应结构。
 - 中转站需要特殊请求头或私有协议时，不在本轮通用适配范围内。
 - 本轮使用 `httpx`，不引入 OpenAI 或 Anthropic 官方 SDK。
