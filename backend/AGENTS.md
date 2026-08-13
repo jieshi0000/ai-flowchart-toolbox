@@ -10,7 +10,7 @@ cp .env .env.local           # 复制生产基线，编辑本地覆盖
 # 编辑 .env.local：至少 DATABASE__AUTO_MIGRATE=true，按需改连接串
 
 # 本地开发（日常）——经 __main__ 加载 Settings（host/port/reload）
-APP_ENV=local uv run python -m src.app.main
+APP_ENV=local uv run python -m app.main
 
 # Docker 部署
 docker compose up -d
@@ -29,7 +29,7 @@ docker compose up -d
 
 ## 项目结构
 
-- `main.py` — 唯一组装入口（`python -m src.app.main`）
+- `main.py` — 唯一组装入口（`python -m app.main`）
 - `core/` — 基础设施（config / crypto / logging / database / redis）
 - `db/` — 迁移实现（读项目根 `db/` SQL）
 - `models/` — SQLAlchemy DB model（继承 BaseDBModel）

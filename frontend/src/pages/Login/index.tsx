@@ -25,7 +25,7 @@ export default function LoginPage() {
   const [loginType, setLoginType] = useState('account');
   const { initialState, setInitialState } = useModel('@@initialState');
 
-  const PROJECT_TITLE = process.env.VITE_APP_TITLE;
+  const PROJECT_TITLE = process.env.VITE_APP_TITLE || '流程图工具箱';
 
   const fetchCaptcha = async () => {
     try {

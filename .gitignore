@@ -2,6 +2,8 @@
 # 规则见 AGENTS.md「密钥管理」——禁止提交明文密钥 / CONFIG_KEY
 .env.local
 .env.*.local
+docker-compose.local.env
+docker-compose.local.override.env
 
 # IDE / 编辑器
 .idea/

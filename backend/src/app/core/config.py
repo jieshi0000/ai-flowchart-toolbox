@@ -71,6 +71,12 @@ class MinioConfig(BaseModel):
     secure: bool = False
 
 
+class CeleryConfig(BaseModel):
+    broker_url: EncStr = ""
+    result_backend: EncStr = ""
+    task_default_queue: str = "flowchart"
+
+
 class Settings(BaseSettings):
     app: AppConfig = AppConfig()
     database: DatabaseConfig = DatabaseConfig()
@@ -78,6 +84,7 @@ class Settings(BaseSettings):
     auth: AuthConfig = AuthConfig()
     redis: RedisConfig = RedisConfig()
     minio: MinioConfig = MinioConfig()
+    celery: CeleryConfig = CeleryConfig()
 
     model_config = {
         "case_sensitive": False,
