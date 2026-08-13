@@ -1,6 +1,7 @@
 import {
   ActionType,
   PageContainer,
+  type ProColumns,
   ProTable,
 } from '@ant-design/pro-components';
 import { Button, message, Modal, Form, Input, InputNumber, Switch, Space, Tag } from 'antd';
@@ -55,7 +56,7 @@ const TableList: React.FC<unknown> = () => {
     });
   };
 
-  const columns = [
+  const columns: ProColumns<DemoProduct.VO>[] = [
     {
       title: '商品名称',
       dataIndex: 'name',
@@ -98,7 +99,11 @@ const TableList: React.FC<unknown> = () => {
       dataIndex: 'isActive',
       key: 'isActive',
       hideInSearch: true,
-      render: (v: boolean) => <Tag color={v ? 'green' : 'default'}>{v ? '是' : '否'}</Tag>,
+      render: (_, record) => (
+        <Tag color={record.isActive ? 'green' : 'default'}>
+          {record.isActive ? '是' : '否'}
+        </Tag>
+      ),
     },
     {
       title: '创建时间',

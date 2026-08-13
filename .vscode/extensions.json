@@ -2,7 +2,6 @@
   "recommendations": [
     "ms-python.python",
     "ms-python.debugpy",
-    "Vue.volar",
     "dbaeumer.vscode-eslint",
     "esbenp.prettier-vscode"
   ]

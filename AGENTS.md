@@ -32,24 +32,29 @@
 
 ## 快速启动
 
-```bash
-# 1. 启动中间件（PG + Redis + MinIO）
-docker compose -f docker-compose.dev.yml up -d
+```powershell
+# 首次使用：复制示例并填写仅限本机的凭据。
+# 若该文件不存在，才从示例创建；已有文件不要覆盖。
+if (-not (Test-Path docker-compose.local.env)) {
+  Copy-Item docker-compose.local.env.example docker-compose.local.env
+}
+# 无论新建还是已有文件，都必须填写示例中的所有必填 LOCAL_* 变量；留空会启动失败。
 
-# 2. 初始化数据库权限（首次启动后执行一次）
-docker exec postgres psql -U app -d flowchart_toolbox_db -f /docker-entrypoint-initdb.d/init.sql
+# 启动完整本地环境：前端、API、Celery、PG、Redis、MinIO
+docker compose --env-file docker-compose.local.env -f docker-compose.local.yml up -d --build
 
-# 3. 启动后端
+# 或分别启动服务（需要自行准备 PG、Redis、MinIO）
 cd backend
-uv sync && APP_ENV=local uv run python -m src.app.main
-# PowerShell: $env:APP_ENV='local'; uv run python -m src.app.main
-# CMD: set APP_ENV=local && uv run python -m src.app.main
+uv sync
+$env:APP_ENV='local'; uv run python -m app.main
 
-# 4. 启动前端
-cd frontend
+cd ..\frontend
 pnpm install
 pnpm dev
+pnpm run typecheck
 ```
+
+`docker-compose.local.env` 是受 Git 忽略的本机私有文件；从 `docker-compose.local.env.example` 复制后填写，绝不能提交。`docker-compose.local.yml` 仅使用变量引用，不含凭据，且仅供本地开发。
 
 ## 端口
 
@@ -81,6 +86,7 @@ flowchart-toolbox/
 ├── docs/               # 项目文档
 ├── docker-compose.yml       # 全栈部署
 ├── docker-compose.dev.yml   # 本地开发中间件
+├── docker-compose.local.yml # Day 1 完整本地环境
 ├── deploy.sh                # 线上部署
 └── test-connectivity.sh    # 连通性测试
 ```

@@ -1,15 +1,15 @@
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories \
     && apk add --no-cache git
 RUN npm config set registry https://registry.npmmirror.com
-RUN npm install -g pnpm@9.15.1
+RUN npm install -g pnpm@11.19.0
 
 WORKDIR /app
 
 COPY . /app
 
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --ignore-scripts
 
 RUN pnpm build
 

@@ -13,9 +13,9 @@ COPY src/ ./src/
 COPY db/ ./db/
 COPY migrate.py ./
 
-ENV PYTHONPATH=/app
+ENV PYTHONPATH=/app/src
 EXPOSE 8000
 
 # 生产迁移（compose 已注入 backend/.env）：
 #   docker compose run --rm backend uv run python migrate.py
-CMD ["uv", "run", "python", "-m", "src.app.main"]
+CMD ["uv", "run", "python", "-m", "app.main"]
