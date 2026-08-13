@@ -1,31 +1,56 @@
-# 环境变量：含 ENC(...) 的 .env 可进 git；仅忽略本机私有覆盖
-# 规则见 AGENTS.md「密钥管理」——禁止提交明文密钥
+# 环境变量：含 ENC(...) 密文的 .env / .env.test 可进 git；仅忽略本机私有覆盖
+# 规则见 AGENTS.md「密钥管理」——禁止提交明文密钥 / CONFIG_KEY
 .env.local
 .env.*.local
 
-# IDE
+# IDE / 编辑器
 .idea/
 *.iml
+.cursor/
 .DS_Store
+Thumbs.db
+desktop.ini
 
 # 本机私有配置（后端模板 .gitignore 亦覆盖 application-local.yml）
 # .vscode/ 可提交：含 Full Stack / Backend / Frontend 启动配置
 
-# 构建产物
-**/target/
-**/dist/
-**/node_modules/
-**/.turbo/
-**/.vite/
+# Python（backend：uv + pytest + hatchling）
 **/__pycache__/
+**/*.py[cod]
+**/*$py.class
 **/.pytest_cache/
 **/.venv/
+**/venv/
+**/build/
+**/dist/
+**/*.egg-info/
 **/uv.lock.bak
+
+# Node（frontend：umi + pnpm + husky）
+**/node_modules/
+**/.umi/
+**/.umi-production/
+**/.turbo/
+**/.vite/
+**/.cache/
+**/*.tsbuildinfo
+**/.eslintcache
+**/.stylelintcache
+**/.husky/_/
+
+# 其他构建产物（脚手架通用，Java 后端亦适用）
+**/target/
 
 # 日志
 **/logs/
 *.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
 
 # 测试覆盖
 **/coverage/
 **/htmlcov/
+**/.coverage
+**/.coverage.*
