@@ -111,7 +111,10 @@ def run_migrations(database_url: str, db_dir: str = "db") -> List[str]:
         for ver, fname, desc, chk in pending:
             try:
                 with engine.begin() as conn:
-                    conn.execute(text(sql_cache[fname]))
+                    # 迁移文件是 PostgreSQL 原始 SQL。使用 exec_driver_sql
+                    # 可避免 SQLAlchemy text() 将 JSON 文本中的冒号误识别为
+                    # bind 参数（例如 {"x": 0} 会被解析为 : 0）。
+                    conn.exec_driver_sql(sql_cache[fname])
                     conn.execute(
                         text(
                             f"INSERT INTO {MIGRATIONS_TABLE} "
