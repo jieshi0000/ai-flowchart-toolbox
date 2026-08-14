@@ -59,6 +59,20 @@ class TestDiagramDocumentValidator:
         with pytest.raises(ValidationError):
             validate_diagram_document(payload)
 
+    @pytest.mark.parametrize(
+        "unsafe_text",
+        [
+            "<script>alert(1)</script>",
+            '<img src=x onerror="alert(1)">',
+            "javascript:alert(1)",
+        ],
+    )
+    def test_rejects_html_scripts_and_event_attributes(self, unsafe_text):
+        with pytest.raises(ValidationError):
+            validate_diagram_document(
+                _document(nodes=[_node("start", "start", unsafe_text), _node("end", "end")])
+            )
+
 
 class TestMermaidCompiler:
     def test_maps_all_node_types_labels_and_cycles(self):
@@ -105,6 +119,27 @@ class TestMermaidCompiler:
         source = compile_mermaid(_document(direction="LR"))
 
         assert source.startswith("flowchart LR\n")
+
+    def test_escapes_mermaid_control_characters(self):
+        label = 'A "quoted" & [bracket] {brace} (round) | pipe / slash \\ hash#; < 3 > 1'
+        source = compile_mermaid(
+            _document(nodes=[_node("start", "start", label), _node("end", "end")])
+        )
+
+        assert (
+            'n0(["A &quot;quoted&quot; &amp; &#91;bracket&#93; &#123;brace&#125; '
+            '&#40;round&#41; &#124; pipe &#47; slash &#92; hash&#35;&#59; &lt; 3 &gt; 1"])'
+        ) in source
+
+    def test_uses_safe_mermaid_aliases_for_contract_node_ids(self):
+        source = compile_mermaid(
+            _document(
+                nodes=[_node("end", "start", "Start"), _node("review-step", "end", "Review")],
+                edges=[{"id": "e1", "source": "end", "target": "review-step"}],
+            )
+        )
+
+        assert source == 'flowchart TB\nn0(["Start"])\nn1(["Review"])\nn0 --> n1'
 
     def test_replaces_existing_mermaid_source_with_a_derived_value(self):
         document = compile_diagram_document(_document(mermaidSource="flowchart TD\nuntrusted"))
