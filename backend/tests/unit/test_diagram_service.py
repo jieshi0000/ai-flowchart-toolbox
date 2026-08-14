@@ -1,7 +1,11 @@
 import pytest
 from pydantic import ValidationError
 
-from app.services.diagram_service import validate_diagram_document
+from app.services.diagram_service import (
+    compile_diagram_document,
+    compile_mermaid,
+    validate_diagram_document,
+)
 
 
 def _node(node_id: str, node_type: str = "process", label: str | None = None) -> dict:
@@ -54,3 +58,55 @@ class TestDiagramDocumentValidator:
     def test_rejects_invalid_document_boundaries(self, payload):
         with pytest.raises(ValidationError):
             validate_diagram_document(payload)
+
+
+class TestMermaidCompiler:
+    def test_maps_all_node_types_labels_and_cycles(self):
+        document = _document(
+            nodes=[
+                _node("start", "start", "Start"),
+                _node("process", "process", "Process"),
+                _node("decision", "decision", "Decision"),
+                _node("input", "input_output", "Input"),
+                _node("subprocess", "subprocess", "Subprocess"),
+                _node("end", "end", "End"),
+            ],
+            edges=[
+                {"id": "e1", "source": "start", "target": "process"},
+                {"id": "e2", "source": "process", "target": "decision"},
+                {"id": "e3", "source": "decision", "target": "input", "condition": "No"},
+                {"id": "e4", "source": "input", "target": "subprocess", "label": "Continue"},
+                {"id": "e5", "source": "subprocess", "target": "end"},
+                {"id": "e6", "source": "end", "target": "start"},
+            ],
+        )
+
+        source = compile_mermaid(document)
+
+        assert source == "\n".join(
+            [
+                "flowchart TB",
+                'n0(["Start"])',
+                'n1["Process"]',
+                'n2{"Decision"}',
+                'n3[/"Input"/]',
+                'n4[["Subprocess"]]',
+                'n5(["End"])',
+                "n0 --> n1",
+                "n1 --> n2",
+                "n2 -->|No| n3",
+                "n3 -->|Continue| n4",
+                "n4 --> n5",
+                "n5 --> n0",
+            ]
+        )
+
+    def test_uses_requested_lr_direction(self):
+        source = compile_mermaid(_document(direction="LR"))
+
+        assert source.startswith("flowchart LR\n")
+
+    def test_replaces_existing_mermaid_source_with_a_derived_value(self):
+        document = compile_diagram_document(_document(mermaidSource="flowchart TD\nuntrusted"))
+
+        assert document.mermaid_source == 'flowchart TB\nn0(["Start"])\nn1(["End"])\nn0 --> n1'
