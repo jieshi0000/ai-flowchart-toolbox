@@ -13,6 +13,7 @@ from app.exceptions.handlers import register_exception_handlers
 from app.api.demo_api import router as demo_router
 from app.api.auth_api import router as auth_router
 from app.api.public_api import router as public_router
+from app.api.provider_api import router as provider_router
 from app.middleware.auth import AuthMiddleware
 
 setup_logging()
@@ -43,7 +44,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.app.name, debug=settings.app.debug, lifespan=lifespan)
 
-for router in (demo_router, auth_router, public_router):
+for router in (demo_router, auth_router, public_router, provider_router):
     for route in router.routes:
         if isinstance(route, APIRoute):
             route.response_model_by_alias = settings.app.json_camel_case
@@ -55,6 +56,7 @@ add_cors(app)
 app.include_router(demo_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(public_router, prefix="/api")
+app.include_router(provider_router, prefix="/api")
 
 logger.info("Application startup", name=settings.app.name, debug=settings.app.debug)
 
