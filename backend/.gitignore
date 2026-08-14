@@ -12,6 +12,9 @@ build/
 /.env.local
 /.env.*.local
 
+# 本机 Provider 清单可能包含运维专用配置；只提交非敏感示例。
+/config/providers.local.json
+
 # Virtual environments
 .venv
 venv/
