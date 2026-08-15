@@ -136,10 +136,16 @@ class ProviderHTTPError(ProviderTransportError):
 
 
 class ProviderResponseError(ProviderTransportError):
-    def __init__(self, *, request_id: str | None = None) -> None:
+    def __init__(
+        self,
+        message: str = "供应商返回了无法解析的响应",
+        *,
+        code: str = "PROVIDER_SUBMIT_FAILED",
+        request_id: str | None = None,
+    ) -> None:
         super().__init__(
-            "供应商返回了无法解析的响应",
-            code="PROVIDER_SUBMIT_FAILED",
+            message,
+            code=code,
             retryable=False,
             fallback_allowed=False,
             request_id=request_id,
