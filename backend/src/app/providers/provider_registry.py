@@ -61,6 +61,19 @@ def _normalise_capabilities(
     return frozenset(result)
 
 
+def _factory_accepts_keyword(factory: Callable[..., ModelProvider], name: str) -> bool:
+    """判断适配器工厂是否声明了可选构造参数，保留旧工厂兼容性。"""
+
+    try:
+        parameters = inspect.signature(factory).parameters.values()
+    except (TypeError, ValueError):
+        return False
+    return any(
+        parameter.name == name or parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in parameters
+    )
+
+
 class ProviderRegistry:
     """按配置顺序注册 Provider，并提供安全的自动/手动选择。"""
 
@@ -134,9 +147,24 @@ class ProviderRegistry:
         factory = self._adapter_factories.get(registration.config.adapter.value)
         if factory is None:
             raise ProviderSelectionError("PROVIDER_NOT_CONFIGURED", "当前供应商适配器尚未注册")
-        provider = factory(registration.config, **kwargs)
+        factory_kwargs = dict(kwargs)
+        if "key_lookup" not in factory_kwargs and _factory_accepts_keyword(factory, "key_lookup"):
+            factory_kwargs["key_lookup"] = self._key_lookup
+        provider = factory(registration.config, **factory_kwargs)
         self.register_provider(provider_id, provider)
         return provider
+
+    async def aclose(self) -> None:
+        """关闭由注册中心持有且支持异步关闭的 Provider。"""
+
+        for registration in self.registrations:
+            provider = registration.provider
+            close = getattr(provider, "aclose", None)
+            if close is None:
+                continue
+            result = close()
+            if inspect.isawaitable(result):
+                await result
 
     @property
     def configs(self) -> tuple[ProviderConfig, ...]:
@@ -340,11 +368,24 @@ class ProviderRegistry:
 def get_provider_registry() -> ProviderRegistry:
     """应用级 Provider Registry 单例。"""
 
-    return ProviderRegistry.from_file()
+    registry = ProviderRegistry.from_file()
+    # 原生适配器按日逐步加入；这里注册后才能由 build_provider 按配置构建实例。
+    from app.providers.anthropic import AnthropicMessagesProvider
+
+    registry.register_adapter("anthropic", AnthropicMessagesProvider)
+    return registry
 
 
 def clear_provider_registry_cache() -> None:
     get_provider_registry.cache_clear()
+
+
+async def close_provider_registry() -> None:
+    """仅在单例已被使用时关闭其 HTTP 等运行时资源。"""
+
+    if get_provider_registry.cache_info().currsize:
+        await get_provider_registry().aclose()
+    clear_provider_registry_cache()
 
 
 __all__ = [
@@ -352,5 +393,6 @@ __all__ = [
     "ProviderRegistry",
     "ProviderSelectionError",
     "clear_provider_registry_cache",
+    "close_provider_registry",
     "get_provider_registry",
 ]

@@ -4,6 +4,7 @@ from app.providers.base import (
     ProviderResult,
     ProviderSubmission,
 )
+from app.providers.anthropic import AnthropicMessagesProvider
 from app.providers.config import (
     ProviderConfigurationError,
     ProviderConfigFile,
@@ -16,6 +17,7 @@ from app.providers.provider_registry import (
     ProviderRegistry,
     ProviderSelectionError,
     clear_provider_registry_cache,
+    close_provider_registry,
     get_provider_registry,
 )
 from app.providers.transport import (
@@ -34,6 +36,7 @@ __all__ = [
     "ProviderPollResult",
     "ProviderResult",
     "ProviderSubmission",
+    "AnthropicMessagesProvider",
     "ProviderConfigurationError",
     "ProviderConfigLoader",
     "ProviderConfigFile",
@@ -43,6 +46,7 @@ __all__ = [
     "ProviderRegistry",
     "ProviderSelectionError",
     "clear_provider_registry_cache",
+    "close_provider_registry",
     "get_provider_registry",
     "HttpxTransport",
     "ProviderHTTPError",

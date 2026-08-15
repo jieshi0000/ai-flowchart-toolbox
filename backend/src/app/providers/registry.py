@@ -5,6 +5,7 @@ from app.providers.provider_registry import (
     ProviderRegistry,
     ProviderSelectionError,
     clear_provider_registry_cache,
+    close_provider_registry,
     get_provider_registry,
 )
 
@@ -13,5 +14,6 @@ __all__ = [
     "ProviderRegistry",
     "ProviderSelectionError",
     "clear_provider_registry_cache",
+    "close_provider_registry",
     "get_provider_registry",
 ]

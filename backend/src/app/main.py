@@ -15,6 +15,7 @@ from app.api.auth_api import router as auth_router
 from app.api.public_api import router as public_router
 from app.api.provider_api import router as provider_router
 from app.middleware.auth import AuthMiddleware
+from app.providers.provider_registry import close_provider_registry
 
 setup_logging()
 settings = get_settings()
@@ -39,7 +40,10 @@ async def lifespan(app: FastAPI):
             logger.error("服务启动中止，请先修复迁移文件或手动执行后重试")
             raise
         logger.info("==================================================")
-    yield
+    try:
+        yield
+    finally:
+        await close_provider_registry()
 
 
 app = FastAPI(title=settings.app.name, debug=settings.app.debug, lifespan=lifespan)
