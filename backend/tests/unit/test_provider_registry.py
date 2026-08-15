@@ -60,3 +60,58 @@ class TestProviderRegistry:
         registry = ProviderRegistry([config], providers={"p": HealthyProvider()}, key_lookup=values.get)
         await registry.refresh_health()
         assert registry.public_infos()[0].status is ProviderStatus.HEALTHY
+
+    @pytest.mark.asyncio
+    async def test_aclose_releases_provider_resources(self):
+        class ClosableProvider(ModelProvider):
+            def __init__(self):
+                self.closed = False
+
+            async def submit(self, request):
+                return ProviderSubmission(result={})
+
+            async def poll(self, submission):
+                return ProviderPollResult(status="succeeded", result={})
+
+            async def cancel(self, submission):
+                return None
+
+            async def health_check(self):
+                from app.schemas.provider import ProviderHealth
+
+                return ProviderHealth(status="healthy")
+
+            async def aclose(self):
+                self.closed = True
+
+        values = {"KEY_A": "present"}
+        config = ProviderConfig.model_validate(provider_entry("p", key_env="KEY_A"))
+        provider = ClosableProvider()
+        registry = ProviderRegistry([config], providers={"p": provider}, key_lookup=values.get)
+
+        await registry.aclose()
+
+        assert provider.closed is True
+
+    def test_adapter_factory_without_key_lookup_remains_supported(self):
+        class SimpleProvider(ModelProvider):
+            async def submit(self, request):
+                return ProviderSubmission(result={})
+
+            async def poll(self, submission):
+                return ProviderPollResult(status="succeeded", result={})
+
+            async def cancel(self, submission):
+                return None
+
+            async def health_check(self):
+                from app.schemas.provider import ProviderHealth
+
+                return ProviderHealth(status="healthy")
+
+        values = {"KEY_A": "present"}
+        config = ProviderConfig.model_validate(provider_entry("p", key_env="KEY_A"))
+        registry = ProviderRegistry([config], key_lookup=values.get)
+        registry.register_adapter("openai_compatible", lambda provider_config: SimpleProvider())
+
+        assert isinstance(registry.build_provider("p"), SimpleProvider)
