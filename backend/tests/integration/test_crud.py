@@ -30,8 +30,8 @@ async def test_create_product(client, reset_data):
     assert body["data"]["name"] == "创建测试商品"
     assert body["data"]["price"] == 199.0
     assert body["data"]["id"] is not None
-    assert body["data"]["created_at"] is not None
-    assert body["data"]["updated_at"] is not None
+    assert body["data"]["createdAt"] is not None
+    assert body["data"]["updatedAt"] is not None
 
 
 async def test_create_product_all_fields(client, reset_data):
@@ -118,7 +118,7 @@ async def test_update_product_full(client, reset_data):
     data = resp.json()["data"]
     assert data["name"] == "全量更新"
     assert data["stock"] == 999
-    assert data["is_active"] is False
+    assert data["isActive"] is False
 
 
 async def test_update_product_not_found(client, reset_data):

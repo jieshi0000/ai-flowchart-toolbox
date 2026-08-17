@@ -6,8 +6,8 @@ async def test_page_default(client, reset_data):
     data = body["data"]
     assert data["total"] == 15
     assert data["pages"] == 2
-    assert data["page_num"] == 1
-    assert data["page_size"] == 10
+    assert data["pageNum"] == 1
+    assert data["pageSize"] == 10
     assert len(data["records"]) == 10
 
 
@@ -16,7 +16,7 @@ async def test_page_second(client, reset_data):
     assert resp.status_code == 200
     data = resp.json()["data"]
     assert len(data["records"]) == 5
-    assert data["page_num"] == 2
+    assert data["pageNum"] == 2
     assert data["pages"] == 3
 
 
@@ -67,8 +67,8 @@ async def test_page_no_results(client, reset_data):
 async def test_page_response_structure(client, reset_data):
     resp = await client.get("/api/demo/page")
     data = resp.json()["data"]
-    assert "page_num" in data
-    assert "page_size" in data
+    assert "pageNum" in data
+    assert "pageSize" in data
     assert "pages" in data
     assert "total" in data
     assert "records" in data
