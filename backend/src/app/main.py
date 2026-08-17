@@ -6,6 +6,7 @@ from fastapi.routing import APIRoute
 from loguru import logger
 
 from app.core.config import get_settings
+from app.core.redis import close_redis
 from app.core.logging import setup_logging
 from app.middleware.logging import LoggingMiddleware
 from app.middleware.cors import add_cors
@@ -45,6 +46,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         await close_provider_registry()
+        await close_redis()
 
 
 app = FastAPI(title=settings.app.name, debug=settings.app.debug, lifespan=lifespan)

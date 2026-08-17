@@ -7,9 +7,10 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.responses import StreamingResponse
 
 from app.core.config import get_settings
-from app.core.database import get_session
+from app.core.database import get_session, get_session_factory
 from app.exceptions.business import BusinessException
 from app.schemas.common import Result
 from app.schemas.task import (
@@ -18,6 +19,10 @@ from app.schemas.task import (
     TaskCreateResponse,
     TaskRetryResponse,
     TaskStatusResponse,
+)
+from app.services.event_service import (
+    stream_task_events,
+    task_status_event_from_response,
 )
 from app.services.task_service import (
     cancel_task,
@@ -75,6 +80,39 @@ async def get_flowchart_task(
     session: AsyncSession = Depends(get_session),
 ):
     return Result.success(data=await get_task(session, _current_user_id(request), task_id))
+
+
+@router.get(
+    "/events",
+    response_class=StreamingResponse,
+    summary="订阅流程图任务事件",
+)
+async def stream_flowchart_task_events(
+    request: Request,
+    task_id: Annotated[UUID, Query(alias="taskId")],
+):
+    user_id = _current_user_id(request)
+    # 先在普通请求阶段校验归属，避免未授权请求得到一个已建立的 SSE 响应。
+    session_factory = get_session_factory()
+    async with session_factory() as initial_session:
+        current = await get_task(initial_session, user_id, task_id)
+    initial_event = task_status_event_from_response(current)
+
+    async def refresh_event():
+        # StreamingResponse 的依赖 session 生命周期不能作为长连接数据库会话使用。
+        async with session_factory() as stream_session:
+            latest = await get_task(stream_session, user_id, task_id)
+        return task_status_event_from_response(latest)
+
+    return StreamingResponse(
+        stream_task_events(task_id, initial_event, refresh=refresh_event),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post(

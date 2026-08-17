@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from types import SimpleNamespace
 from uuid import uuid4
 
@@ -6,7 +7,13 @@ from starlette.requests import Request
 
 from app.api import task_api
 from app.exceptions.business import BusinessException
-from app.schemas.task import TaskCreateRequest, TaskCreateResponse, TaskStatus
+from app.schemas.task import (
+    TaskCreateRequest,
+    TaskCreateResponse,
+    TaskStatus,
+    TaskStatusResponse,
+    TaskType,
+)
 
 
 def _request(user_id: str | None = "user-a", headers: list[tuple[bytes, bytes]] | None = None) -> Request:
@@ -65,3 +72,38 @@ def test_current_user_uses_local_header_only_when_auth_is_disabled(monkeypatch):
     )
 
     assert user_id == "local-user-a"
+
+
+@pytest.mark.asyncio
+async def test_events_endpoint_sends_terminal_status_as_first_sse_frame(monkeypatch):
+    task_id = uuid4()
+    status = TaskStatusResponse(
+        taskId=task_id,
+        type=TaskType.DIAGRAM_GENERATE,
+        status=TaskStatus.SUCCESS,
+        progress=100,
+        stage="流程图已生成",
+    )
+
+    async def fake_get_task(session, user_id, requested_task_id):
+        assert user_id == "user-a"
+        assert requested_task_id == task_id
+        return status
+
+    @asynccontextmanager
+    async def fake_session_context():
+        yield SimpleNamespace()
+
+    monkeypatch.setattr(task_api, "get_task", fake_get_task)
+    monkeypatch.setattr(task_api, "get_session_factory", lambda: fake_session_context)
+
+    response = await task_api.stream_flowchart_task_events(_request(), task_id)
+    chunks = [chunk async for chunk in response.body_iterator]
+
+    assert response.media_type == "text/event-stream"
+    assert response.headers["x-accel-buffering"] == "no"
+    assert chunks == [
+        'event: task-status\ndata: {"taskId":"'
+        + str(task_id)
+        + '","status":"success","progress":100,"stage":"流程图已生成"}\n\n'
+    ]

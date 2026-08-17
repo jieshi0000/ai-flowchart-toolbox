@@ -12,6 +12,14 @@ from app.schemas.task import TaskCreateRequest, TaskStatus
 from app.services import task_service
 
 
+@pytest.fixture(autouse=True)
+def disable_default_task_event_publisher(monkeypatch):
+    async def publish_nothing(_event):
+        return None
+
+    monkeypatch.setattr("app.services.task_service.publish_task_event", publish_nothing)
+
+
 class _ScalarResult:
     def __init__(self, value):
         self._value = value
@@ -115,6 +123,24 @@ async def test_create_task_persists_waiting_snapshot_and_selected_provider():
 
 
 @pytest.mark.asyncio
+async def test_create_task_publishes_waiting_event_after_commit():
+    session = FakeSession(None)
+    publisher = AsyncMock()
+
+    await task_service.create_task(
+        session,
+        "user-a",
+        _request(),
+        registry=_registry(),
+        event_publisher=publisher,
+    )
+
+    event = publisher.await_args.args[0]
+    assert event.status is TaskStatus.WAITING
+    assert event.stage == "任务已创建，等待处理"
+
+
+@pytest.mark.asyncio
 async def test_create_task_reuses_existing_idempotency_task_without_selecting_provider():
     existing = _task(status="provider_processing")
     session = FakeSession(existing)
@@ -150,6 +176,25 @@ async def test_cancel_task_marks_local_task_canceled_without_provider_call():
     assert response.provider_cancel_requested is False
     assert "UPDATE flowchart_task" in str(session.statements[1])
     session.commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_cancel_task_publishes_committed_canceled_status():
+    task = _task(status="waiting")
+    session = FakeSession(task, 1)
+    publisher = AsyncMock()
+
+    await task_service.cancel_task(
+        session,
+        "user-a",
+        task.id,
+        event_publisher=publisher,
+    )
+
+    event = publisher.await_args.args[0]
+    assert event.status is TaskStatus.CANCELED
+    assert event.progress == 0
+    assert event.error_code == "TASK_CANCELED"
 
 
 @pytest.mark.asyncio
