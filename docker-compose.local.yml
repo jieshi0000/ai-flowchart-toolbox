@@ -63,14 +63,18 @@ services:
 
   backend-api:
     build: ./backend
+    volumes:
+      - ./backend/config/providers.local.json:/app/config/providers.local.json:ro
     environment: &backend-environment
       APP__DEBUG: "false"
       APP__HOST: 0.0.0.0
       APP__JSON_CAMEL_CASE: "true"
       APP__PORT: 8000
+      AI__PROVIDERS_FILE: /app/config/providers.local.json
       AUTH__ENABLED: "true"
       DATABASE__AUTO_MIGRATE: "true"
       DATABASE__URL: "postgresql://${LOCAL_POSTGRES_USER:?Set LOCAL_POSTGRES_USER in docker-compose.local.env}:${LOCAL_POSTGRES_PASSWORD:?Set LOCAL_POSTGRES_PASSWORD in docker-compose.local.env}@postgres:5432/${LOCAL_POSTGRES_DB:?Set LOCAL_POSTGRES_DB in docker-compose.local.env}"
+      DEEPSEEK_API_KEY: "${LOCAL_DEEPSEEK_API_KEY:-}"
       MINIO__ACCESS_KEY: "${LOCAL_MINIO_ROOT_USER:?Set LOCAL_MINIO_ROOT_USER in docker-compose.local.env}"
       MINIO__ENDPOINT: minio:9000
       MINIO__SECURE: "false"
@@ -105,6 +109,8 @@ services:
 
   celery-worker:
     build: ./backend
+    volumes:
+      - ./backend/config/providers.local.json:/app/config/providers.local.json:ro
     command:
       [
         "uv",
@@ -147,6 +153,7 @@ services:
         condition: service_healthy
     volumes:
       - local_celery_beat_data:/app/.celery
+      - ./backend/config/providers.local.json:/app/config/providers.local.json:ro
     working_dir: /app/.celery
     networks:
       - flowchart-local

@@ -27,10 +27,11 @@ def _request(user_id: str | None = "user-a", headers: list[tuple[bytes, bytes]] 
 async def test_create_endpoint_uses_authenticated_request_user(monkeypatch):
     captured: dict[str, object] = {}
 
-    async def fake_create_task(session, user_id, payload):
+    async def fake_create_task(session, user_id, payload, **kwargs):
         captured["session"] = session
         captured["user_id"] = user_id
         captured["payload"] = payload
+        captured["enqueue"] = kwargs["enqueue"]
         return TaskCreateResponse(task_id=uuid4(), status=TaskStatus.WAITING, estimated_seconds=30)
 
     monkeypatch.setattr(task_api, "create_task", fake_create_task)
