@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
@@ -15,6 +15,14 @@ from app.schemas.task import TaskStatus
 from app.services.diagram_service import compile_diagram_document
 from app.services.task_engine import TaskEngine
 from tests.unit.provider_fixtures import provider_entry
+
+
+@pytest.fixture(autouse=True)
+def disable_default_task_event_publisher(monkeypatch):
+    async def publish_nothing(_event):
+        return None
+
+    monkeypatch.setattr("app.services.task_engine.publish_task_event", publish_nothing)
 
 
 class _ScalarResult:
@@ -165,6 +173,36 @@ async def test_execute_sync_provider_reaches_success_and_compiles_mermaid():
     assert task.result["metadata"]["sourceTaskId"] == str(task.id)
     schedule_poll.assert_not_called()
     assert [call.operation for call in session.added] == ["submit"]
+
+
+@pytest.mark.asyncio
+async def test_execute_publishes_events_for_each_visible_status_transition():
+    provider = _Provider(
+        submission=ProviderSubmission(
+            provider_request_id="request-1",
+            mode="sync",
+            status="succeeded",
+            result=_diagram(),
+        )
+    )
+    task = _task()
+    session = _Session(task)
+    publisher = AsyncMock()
+    engine = TaskEngine(
+        session_factory=_session_factory(session),
+        registry=_registry(provider),
+        event_publisher=publisher,
+        now=lambda: datetime(2026, 8, 17, 12, 0, 1),
+    )
+
+    await engine.execute(task.id)
+
+    assert [call.args[0].status for call in publisher.await_args_list] == [
+        TaskStatus.SUBMITTING,
+        TaskStatus.VALIDATING,
+        TaskStatus.RENDERING,
+        TaskStatus.SUCCESS,
+    ]
 
 
 @pytest.mark.asyncio

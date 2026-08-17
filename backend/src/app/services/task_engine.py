@@ -32,6 +32,11 @@ from app.providers.provider_registry import (
 from app.providers.transport import ProviderTransportError
 from app.schemas.task import TERMINAL_TASK_STATUSES, TaskStatus
 from app.services.diagram_service import compile_diagram_document
+from app.services.event_service import (
+    TaskEventPublisher,
+    publish_task_event,
+    task_status_event_from_task,
+)
 
 
 POLL_BACKOFF_SECONDS = (3, 6, 12, 15, 15)
@@ -106,6 +111,7 @@ class TaskEngine:
         schedule_poll: Callable[[UUID, int], None] | None = None,
         schedule_cancel: Callable[[UUID, int], None] | None = None,
         now: Callable[[], datetime] | None = None,
+        event_publisher: TaskEventPublisher | None = None,
     ) -> None:
         self._session_factory = session_factory or get_session_factory()
         self._registry = registry
@@ -113,6 +119,7 @@ class TaskEngine:
         self._schedule_poll = schedule_poll or _default_schedule_poll
         self._schedule_cancel = schedule_cancel or _default_schedule_cancel
         self._now = now or _utcnow
+        self._event_publisher = event_publisher or publish_task_event
 
     async def execute(self, task_id: UUID) -> None:
         """提交尚未处理的任务，或重试一个已安排的提交。"""
@@ -280,7 +287,10 @@ class TaskEngine:
                 self._mark_failed(task, code="DIAGRAM_SCHEMA_INVALID")
             else:
                 payload = dict(task.result)
-            await session.commit()
+            if payload is None:
+                await self._commit_task_update(session, task)
+            else:
+                await session.commit()
 
         if payload is None:
             return
@@ -296,6 +306,7 @@ class TaskEngine:
         execute_ids: list[UUID] = []
         poll_ids: list[UUID] = []
         cancel_ids: list[UUID] = []
+        changed_tasks: list[FlowchartTask] = []
         active_statuses = [
             TaskStatus.WAITING.value,
             TaskStatus.SUBMITTING.value,
@@ -332,6 +343,7 @@ class TaskEngine:
                 task_id = _to_uuid(task.id)
                 if status not in TERMINAL_TASK_STATUSES and _is_due(task.deadline_at, now):
                     self._mark_failed(task, code=_TIMEOUT_CODE)
+                    changed_tasks.append(task)
                     if task.provider_request_id:
                         cancel_ids.append(task_id)
                     continue
@@ -352,6 +364,8 @@ class TaskEngine:
                 ) and task.provider_request_id:
                     cancel_ids.append(task_id)
             await session.commit()
+            for changed_task in changed_tasks:
+                await self._publish_task_event(changed_task)
 
         for task_id in execute_ids:
             self._schedule_execute(task_id, 0)
@@ -381,7 +395,7 @@ class TaskEngine:
                 task.next_poll_at = now + timedelta(seconds=SUBMIT_WATCHDOG_SECONDS)
                 if task.queue_wait_ms is None:
                     task.queue_wait_ms = _elapsed_ms(task.created_at, now)
-            await session.commit()
+            await self._commit_task_update(session, task)
 
             if timeout_snapshot is None:
                 return _snapshot(task)
@@ -447,7 +461,7 @@ class TaskEngine:
             else:
                 self._mark_failed(task, code="PROVIDER_SUBMIT_FAILED")
                 action = ("skip", 0, None)
-            await session.commit()
+            await self._commit_task_update(session, task)
 
         if cancel_after_commit:
             return "cancel", 0, None
@@ -501,7 +515,7 @@ class TaskEngine:
                 action = "execute"
             else:
                 self._mark_failed(task, code=error.code)
-            await session.commit()
+            await self._commit_task_update(session, task)
 
         if cancel_after_commit:
             self._schedule_cancel(task_id, 0)
@@ -524,7 +538,7 @@ class TaskEngine:
             if _is_due(task.deadline_at, now):
                 self._mark_failed(task, code=_TIMEOUT_CODE)
                 should_cancel = bool(task.provider_request_id)
-                await session.commit()
+                await self._commit_task_update(session, task)
                 return None, should_cancel
             if task.next_poll_at is None or task.next_poll_at > now:
                 return None, False
@@ -565,7 +579,7 @@ class TaskEngine:
             )
             if _is_due(task.deadline_at, now):
                 self._mark_failed(task, code=_TIMEOUT_CODE)
-                await session.commit()
+                await self._commit_task_update(session, task)
                 return "cancel" if task.provider_request_id else "skip", 0, None
             if result.status == "succeeded":
                 if result.result is None:
@@ -597,7 +611,7 @@ class TaskEngine:
                 task.error_code = None
                 task.error_message = None
                 action = ("poll", delay_seconds, None)
-            await session.commit()
+            await self._commit_task_update(session, task)
             return action
 
     async def _handle_poll_error(
@@ -648,7 +662,7 @@ class TaskEngine:
                 action = "poll"
             else:
                 self._mark_failed(task, code=error.code)
-            await session.commit()
+            await self._commit_task_update(session, task)
 
         if cancel_after_commit:
             self._schedule_cancel(task_id, 0)
@@ -681,7 +695,7 @@ class TaskEngine:
             if _is_due(task.deadline_at, self._now()):
                 self._mark_failed(task, code=_TIMEOUT_CODE)
                 cancel_after_commit = bool(task.provider_request_id)
-                await session.commit()
+                await self._commit_task_update(session, task)
             else:
                 valid = True
         if cancel_after_commit:
@@ -706,7 +720,7 @@ class TaskEngine:
                 else:
                     _set_stage(task, TaskStatus.RENDERING)
                     task.result = payload
-                await session.commit()
+                await self._commit_task_update(session, task)
 
         if cancel_after_commit:
             self._schedule_cancel(task_id, 0)
@@ -728,7 +742,7 @@ class TaskEngine:
                 task.error_code = None
                 task.error_message = None
                 task.provider_wait_ms = _elapsed_ms(task.created_at, self._now())
-            await session.commit()
+            await self._commit_task_update(session, task)
 
         if cancel_after_commit:
             self._schedule_cancel(task_id, 0)
@@ -757,7 +771,7 @@ class TaskEngine:
                 )
             self._mark_failed(task, code=code)
             cancel_after_commit = bool(task.provider_request_id and code == _TIMEOUT_CODE)
-            await session.commit()
+            await self._commit_task_update(session, task)
         if cancel_after_commit:
             self._schedule_cancel(task_id, 0)
 
@@ -818,6 +832,19 @@ class TaskEngine:
 
     def _registry_or_default(self) -> ProviderRegistry:
         return self._registry or get_provider_registry()
+
+    async def _publish_task_event(self, task: FlowchartTask) -> None:
+        event = task_status_event_from_task(task)
+        try:
+            await self._event_publisher(event)
+        except Exception:
+            logger.warning("flowchart task event publish deferred taskId={}", task.id)
+
+    async def _commit_task_update(self, session: AsyncSession, task: FlowchartTask) -> None:
+        """提交任务状态后发布通知；通知异常不能回滚业务事实。"""
+
+        await session.commit()
+        await self._publish_task_event(task)
 
     def _mark_failed(self, task: FlowchartTask, *, code: str) -> None:
         task.status = TaskStatus.FAILED.value

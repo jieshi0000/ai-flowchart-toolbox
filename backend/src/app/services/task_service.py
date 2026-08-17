@@ -31,6 +31,12 @@ from app.schemas.task import (
     TaskStatus,
     TaskStatusResponse,
 )
+from app.schemas.task_event import TaskStatusEvent
+from app.services.event_service import (
+    TaskEventPublisher,
+    publish_task_event,
+    task_status_event_from_task,
+)
 
 TASK_RETENTION = timedelta(days=7)
 WAITING_STAGE = "任务已创建，等待处理"
@@ -148,6 +154,7 @@ async def create_task(
     registry: ProviderRegistry | None = None,
     source_task_id: UUID | None = None,
     enqueue: Callable[[UUID], None] | None = None,
+    event_publisher: TaskEventPublisher | None = None,
 ) -> TaskCreateResponse:
     """创建本地任务；重复幂等键复用已有任务，不发起供应商调用。"""
 
@@ -187,6 +194,7 @@ async def create_task(
             _dispatch(enqueue, _to_uuid(existing.id))
             return _to_create_response(existing)
         raise
+    await _publish_task_event(task, event_publisher)
     _dispatch(enqueue, _to_uuid(task.id))
     return _to_create_response(task)
 
@@ -205,6 +213,7 @@ async def cancel_task(
     task_id: UUID,
     *,
     enqueue_cancel: Callable[[UUID], None] | None = None,
+    event_publisher: TaskEventPublisher | None = None,
 ) -> TaskCancelResponse:
     task = await _get_owned_task(session, user_id, task_id)
     status = TaskStatus(task.status)
@@ -226,6 +235,7 @@ async def cancel_task(
         )
         .values(
             status=TaskStatus.CANCELED.value,
+            progress=0,
             stage=CANCELED_STAGE,
             error_code="TASK_CANCELED",
             error_message="任务已取消",
@@ -237,6 +247,17 @@ async def cancel_task(
         raise BusinessException(code=409, message="任务状态已变化，请刷新后重试")
 
     await session.commit()
+    await _publish_event(
+        TaskStatusEvent(
+            task_id=_to_uuid(task.id),
+            status=TaskStatus.CANCELED,
+            progress=0,
+            stage=CANCELED_STAGE,
+            error_code="TASK_CANCELED",
+            error_message="任务已取消",
+        ),
+        event_publisher,
+    )
     provider_cancel_requested = bool(task.provider_request_id)
     if provider_cancel_requested:
         _dispatch(enqueue_cancel, task_id)
@@ -255,6 +276,7 @@ async def retry_task(
     *,
     registry: ProviderRegistry | None = None,
     enqueue: Callable[[UUID], None] | None = None,
+    event_publisher: TaskEventPublisher | None = None,
 ) -> TaskRetryResponse:
     source_task = await _get_owned_task(session, user_id, task_id)
     if TaskStatus(source_task.status) not in RETRYABLE_TASK_STATUSES:
@@ -281,6 +303,7 @@ async def retry_task(
         registry=registry,
         source_task_id=source_task.id,
         enqueue=enqueue,
+        event_publisher=event_publisher,
     )
     return TaskRetryResponse(
         task_id=created.task_id,
@@ -298,6 +321,25 @@ def _dispatch(callback: Callable[[UUID], None] | None, task_id: UUID) -> None:
         # 数据库事务已提交；Beat 会补偿未能立即入队的任务。
         # 不输出异常对象，以免基础设施连接配置进入日志。
         logger.warning("flowchart task dispatch deferred taskId={}", task_id)
+
+
+async def _publish_task_event(
+    task: FlowchartTask,
+    event_publisher: TaskEventPublisher | None,
+) -> None:
+    await _publish_event(task_status_event_from_task(task), event_publisher)
+
+
+async def _publish_event(
+    event: TaskStatusEvent,
+    event_publisher: TaskEventPublisher | None,
+) -> None:
+    publisher = event_publisher or publish_task_event
+    try:
+        await publisher(event)
+    except Exception:
+        # 事件是通知层，不能让 Redis 故障改变已经提交的数据库事务结果。
+        logger.warning("flowchart task event publish deferred taskId={}", event.task_id)
 
 
 __all__ = [
