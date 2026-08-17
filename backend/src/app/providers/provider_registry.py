@@ -369,10 +369,12 @@ def get_provider_registry() -> ProviderRegistry:
     """应用级 Provider Registry 单例。"""
 
     registry = ProviderRegistry.from_file()
-    # 原生适配器按日逐步加入；这里注册后才能由 build_provider 按配置构建实例。
+    # 适配器按日逐步加入；这里注册后才能由 build_provider 按配置构建实例。
     from app.providers.anthropic import AnthropicMessagesProvider
+    from app.providers.openai_chat import OpenAIChatCompletionsProvider
 
     registry.register_adapter("anthropic", AnthropicMessagesProvider)
+    registry.register_adapter("openai_compatible", OpenAIChatCompletionsProvider)
     return registry
 
 
