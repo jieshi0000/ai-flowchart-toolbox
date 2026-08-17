@@ -22,6 +22,7 @@ from app.schemas.provider import (
     ProviderConfig,
     ProviderHealth,
     ProviderPublicInfo,
+    ProviderProtocol,
     ProviderStatus,
 )
 
@@ -88,6 +89,7 @@ class ProviderRegistry:
         self._registrations: dict[str, ProviderRegistration] = {}
         self._order: list[str] = []
         self._adapter_factories: dict[str, Callable[..., ModelProvider]] = {}
+        self._protocol_adapter_factories: dict[tuple[str, str], Callable[..., ModelProvider]] = {}
         provider_map = dict(providers or {})
         for config in configs:
             self.register(config, provider=provider_map.get(config.provider_id))
@@ -132,19 +134,47 @@ class ProviderRegistry:
         self._registrations[provider_id] = updated
         return updated
 
-    def register_adapter(self, adapter: str, factory: Callable[..., ModelProvider]) -> None:
-        """注册适配器工厂，供后续 D05/D06 适配器复用。"""
+    def register_adapter(
+        self,
+        adapter: str,
+        factory: Callable[..., ModelProvider],
+        *,
+        protocol: ProviderProtocol | str | None = None,
+    ) -> None:
+        """注册适配器工厂，可按协议区分同一兼容适配器。"""
 
         normalized = str(adapter).strip()
         if not normalized:
             raise ValueError("adapter 不能为空")
-        self._adapter_factories[normalized] = factory
+        if protocol is None:
+            self._adapter_factories[normalized] = factory
+            return
+        normalized_protocol = (
+            protocol.value if isinstance(protocol, ProviderProtocol) else str(protocol).strip()
+        )
+        if not normalized_protocol:
+            raise ValueError("protocol 不能为空")
+        self._protocol_adapter_factories[(normalized, normalized_protocol)] = factory
+
+    def register_protocol_adapter(
+        self,
+        adapter: str,
+        protocol: ProviderProtocol | str,
+        factory: Callable[..., ModelProvider],
+    ) -> None:
+        """显式注册某个 adapter + protocol 的构造工厂。"""
+
+        self.register_adapter(adapter, factory, protocol=protocol)
 
     def build_provider(self, provider_id: str, **kwargs: Any) -> ModelProvider:
         registration = self.get_registration(provider_id)
         if registration.provider is not None:
             return registration.provider
-        factory = self._adapter_factories.get(registration.config.adapter.value)
+        factory = self._protocol_adapter_factories.get(
+            (registration.config.adapter.value, registration.config.protocol.value)
+        )
+        if factory is None:
+            factory = self._adapter_factories.get(registration.config.adapter.value)
         if factory is None:
             raise ProviderSelectionError("PROVIDER_NOT_CONFIGURED", "当前供应商适配器尚未注册")
         factory_kwargs = dict(kwargs)
@@ -369,12 +399,26 @@ def get_provider_registry() -> ProviderRegistry:
     """应用级 Provider Registry 单例。"""
 
     registry = ProviderRegistry.from_file()
-    # 适配器按日逐步加入；这里注册后才能由 build_provider 按配置构建实例。
+    # 适配器按协议注册，避免 openai_compatible 配置被错误地交给另一种协议。
     from app.providers.anthropic import AnthropicMessagesProvider
     from app.providers.openai_chat import OpenAIChatCompletionsProvider
+    from app.providers.openai_responses import OpenAIResponsesProvider
 
-    registry.register_adapter("anthropic", AnthropicMessagesProvider)
-    registry.register_adapter("openai_compatible", OpenAIChatCompletionsProvider)
+    registry.register_adapter(
+        "anthropic",
+        AnthropicMessagesProvider,
+        protocol=ProviderProtocol.ANTHROPIC_MESSAGES,
+    )
+    registry.register_adapter(
+        "openai_compatible",
+        OpenAIChatCompletionsProvider,
+        protocol=ProviderProtocol.OPENAI_CHAT_COMPLETIONS,
+    )
+    registry.register_adapter(
+        "openai_compatible",
+        OpenAIResponsesProvider,
+        protocol=ProviderProtocol.OPENAI_RESPONSES,
+    )
     return registry
 
 
