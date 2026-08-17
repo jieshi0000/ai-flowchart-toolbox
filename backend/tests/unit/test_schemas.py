@@ -15,6 +15,7 @@ class TestResult:
         assert r.code == 200
         assert r.data == {"key": "value"}
         assert r.message == "操作成功"
+        assert r.model_dump(by_alias=True)["errorCode"] is None
 
     def test_success_without_data(self):
         r = Result.success()
@@ -32,9 +33,10 @@ class TestResult:
         assert r.data is None
 
     def test_error_custom(self):
-        r = Result.error(code=404, message="未找到")
+        r = Result.error(code=404, message="未找到", error_code="RESOURCE_NOT_FOUND")
         assert r.code == 404
         assert r.message == "未找到"
+        assert r.error_code == "RESOURCE_NOT_FOUND"
 
     def test_timestamp_ms_epoch(self):
         r = Result.success()

@@ -1,15 +1,18 @@
 import time
 from typing import TypeVar, Generic, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from math import ceil
 
 T = TypeVar("T")
 
 
 class Result(BaseModel, Generic[T]):
+    model_config = ConfigDict(populate_by_name=True)
+
     code: int = Field(default=200)
     data: Optional[T] = Field(default=None)
     message: Optional[str] = Field(default=None)
+    error_code: Optional[str] = Field(default=None, alias="errorCode")
     timestamp: int = Field(default_factory=lambda: int(time.time() * 1000))
 
     @classmethod
@@ -17,8 +20,13 @@ class Result(BaseModel, Generic[T]):
         return cls(code=200, data=data, message=message)
 
     @classmethod
-    def error(cls, code: int = 500, message: str = "操作失败") -> "Result":
-        return cls(code=code, message=message)
+    def error(
+        cls,
+        code: int = 500,
+        message: str = "操作失败",
+        error_code: str | None = None,
+    ) -> "Result":
+        return cls(code=code, message=message, error_code=error_code)
 
 
 class PageReq(BaseModel):
