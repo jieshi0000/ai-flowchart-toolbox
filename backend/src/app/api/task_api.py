@@ -54,7 +54,14 @@ async def create_flowchart_task(
     request: Request,
     session: AsyncSession = Depends(get_session),
 ):
-    return Result.success(data=await create_task(session, _current_user_id(request), payload))
+    return Result.success(
+        data=await create_task(
+            session,
+            _current_user_id(request),
+            payload,
+            enqueue=_enqueue_task_execution,
+        )
+    )
 
 
 @router.get(
@@ -80,7 +87,14 @@ async def cancel_flowchart_task(
     task_id: Annotated[UUID, Query(alias="taskId")],
     session: AsyncSession = Depends(get_session),
 ):
-    return Result.success(data=await cancel_task(session, _current_user_id(request), task_id))
+    return Result.success(
+        data=await cancel_task(
+            session,
+            _current_user_id(request),
+            task_id,
+            enqueue_cancel=_enqueue_task_cancel,
+        )
+    )
 
 
 @router.post(
@@ -93,7 +107,27 @@ async def retry_flowchart_task(
     task_id: Annotated[UUID, Query(alias="taskId")],
     session: AsyncSession = Depends(get_session),
 ):
-    return Result.success(data=await retry_task(session, _current_user_id(request), task_id))
+    return Result.success(
+        data=await retry_task(
+            session,
+            _current_user_id(request),
+            task_id,
+            enqueue=_enqueue_task_execution,
+        )
+    )
 
 
 __all__ = ["router"]
+
+
+def _enqueue_task_execution(task_id: UUID) -> None:
+    # 延迟导入，API 单元测试和无 CONFIG_KEY 的文档/Schema 工具无需加载 Celery 配置。
+    from app.workers.tasks import enqueue_task_execution
+
+    enqueue_task_execution(task_id)
+
+
+def _enqueue_task_cancel(task_id: UUID) -> None:
+    from app.workers.tasks import enqueue_task_cancel
+
+    enqueue_task_cancel(task_id)

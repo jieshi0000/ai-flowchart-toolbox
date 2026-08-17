@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import uuid_utils
+from loguru import logger
 from pydantic import ValidationError
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
@@ -145,11 +147,13 @@ async def create_task(
     *,
     registry: ProviderRegistry | None = None,
     source_task_id: UUID | None = None,
+    enqueue: Callable[[UUID], None] | None = None,
 ) -> TaskCreateResponse:
     """创建本地任务；重复幂等键复用已有任务，不发起供应商调用。"""
 
     existing = await _find_by_idempotency_key(session, user_id, request.idempotency_key)
     if existing is not None:
+        _dispatch(enqueue, _to_uuid(existing.id))
         return _to_create_response(existing)
 
     selected_provider = _select_provider(request, registry)
@@ -180,8 +184,10 @@ async def create_task(
         await session.rollback()
         existing = await _find_by_idempotency_key(session, user_id, request.idempotency_key)
         if existing is not None:
+            _dispatch(enqueue, _to_uuid(existing.id))
             return _to_create_response(existing)
         raise
+    _dispatch(enqueue, _to_uuid(task.id))
     return _to_create_response(task)
 
 
@@ -197,6 +203,8 @@ async def cancel_task(
     session: AsyncSession,
     user_id: str,
     task_id: UUID,
+    *,
+    enqueue_cancel: Callable[[UUID], None] | None = None,
 ) -> TaskCancelResponse:
     task = await _get_owned_task(session, user_id, task_id)
     status = TaskStatus(task.status)
@@ -229,11 +237,14 @@ async def cancel_task(
         raise BusinessException(code=409, message="任务状态已变化，请刷新后重试")
 
     await session.commit()
+    provider_cancel_requested = bool(task.provider_request_id)
+    if provider_cancel_requested:
+        _dispatch(enqueue_cancel, task_id)
     return TaskCancelResponse(
         task_id=_to_uuid(task.id),
         status=TaskStatus.CANCELED,
         # D09 才会在 Worker 中向已有供应商请求发出尽力取消。
-        provider_cancel_requested=bool(task.provider_request_id),
+        provider_cancel_requested=provider_cancel_requested,
     )
 
 
@@ -243,6 +254,7 @@ async def retry_task(
     task_id: UUID,
     *,
     registry: ProviderRegistry | None = None,
+    enqueue: Callable[[UUID], None] | None = None,
 ) -> TaskRetryResponse:
     source_task = await _get_owned_task(session, user_id, task_id)
     if TaskStatus(source_task.status) not in RETRYABLE_TASK_STATUSES:
@@ -268,12 +280,24 @@ async def retry_task(
         request,
         registry=registry,
         source_task_id=source_task.id,
+        enqueue=enqueue,
     )
     return TaskRetryResponse(
         task_id=created.task_id,
         source_task_id=_to_uuid(source_task.id),
         status=created.status,
     )
+
+
+def _dispatch(callback: Callable[[UUID], None] | None, task_id: UUID) -> None:
+    if callback is None:
+        return
+    try:
+        callback(task_id)
+    except Exception:
+        # 数据库事务已提交；Beat 会补偿未能立即入队的任务。
+        # 不输出异常对象，以免基础设施连接配置进入日志。
+        logger.warning("flowchart task dispatch deferred taskId={}", task_id)
 
 
 __all__ = [

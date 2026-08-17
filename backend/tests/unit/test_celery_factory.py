@@ -25,3 +25,14 @@ def test_celery_allows_dedicated_broker_and_result_backend():
     assert celery_app.conf.broker_url == "redis://broker:6379/4"
     assert celery_app.conf.result_backend == "redis://result:6379/5"
     assert celery_app.conf.task_default_queue == "flowchart_tasks"
+
+
+def test_celery_registers_task_module_and_compensation_schedule():
+    settings = Settings(_env_file=None)
+    celery_app = create_celery_app(settings)
+
+    assert "app.workers.tasks" in celery_app.conf.include
+    schedule = celery_app.conf.beat_schedule["flowchart-compensate-tasks"]
+    assert schedule["task"] == "flowchart.tasks.compensate"
+    assert schedule["schedule"] == 60.0
+    assert celery_app.conf.task_serializer == "json"
