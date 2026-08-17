@@ -7,6 +7,7 @@ from app.providers.base import (
 from app.providers.anthropic import AnthropicMessagesProvider
 from app.providers.openai_chat import OpenAIChatCompletionsProvider
 from app.providers.openai_responses import OpenAIResponsesProvider
+from app.providers.provider_router import ProviderRouteResult, ProviderRouter
 from app.providers.config import (
     ProviderConfigurationError,
     ProviderConfigFile,
@@ -41,6 +42,8 @@ __all__ = [
     "AnthropicMessagesProvider",
     "OpenAIChatCompletionsProvider",
     "OpenAIResponsesProvider",
+    "ProviderRouteResult",
+    "ProviderRouter",
     "ProviderConfigurationError",
     "ProviderConfigLoader",
     "ProviderConfigFile",

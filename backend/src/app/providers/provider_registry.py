@@ -332,6 +332,8 @@ class ProviderRegistry:
             config = registration.config
             health = self._effective_health(registration)
             required = _normalise_capabilities(required_capabilities)
+            if model is not None and config.model != model.strip():
+                raise ProviderSelectionError("PROVIDER_NOT_CONFIGURED", "指定的供应商与模型不匹配")
             if not config.enabled or not config.allow_manual_selection:
                 raise ProviderSelectionError("PROVIDER_UNHEALTHY", "指定的供应商当前不可用")
             if not self.has_api_key(config):
@@ -378,6 +380,29 @@ class ProviderRegistry:
         model: str | None = None,
     ) -> ProviderRegistration:
         return self.select(required_capabilities, provider_id=provider_id, model=model)
+
+    async def submit_with_fallback(
+        self,
+        request: Mapping[str, Any],
+        required_capabilities: Iterable[ProviderCapability | str] | None = (
+            ProviderCapability.TEXT_GENERATION,
+        ),
+        *,
+        provider_id: str | None = None,
+        model: str | None = None,
+        **provider_kwargs: Any,
+    ):
+        """提交一次生成请求，并按安全规则最多切换一个候选供应商。"""
+
+        from app.providers.provider_router import ProviderRouter
+
+        return await ProviderRouter(self).submit(
+            request,
+            required_capabilities,
+            provider_id=provider_id,
+            model=model,
+            **provider_kwargs,
+        )
 
     def _initial_health(self, config: ProviderConfig) -> ProviderHealth:
         if not config.enabled:
