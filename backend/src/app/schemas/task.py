@@ -50,6 +50,22 @@ class TaskCreateRequest(CamelVO):
             raise ValueError("流程描述不能为空")
         return value
 
+    @field_validator("provider_id", "model")
+    @classmethod
+    def normalize_optional_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        value = value.strip()
+        return value or None
+
+    @field_validator("idempotency_key")
+    @classmethod
+    def trim_idempotency_key(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("幂等键不能为空")
+        return value
+
 
 class TaskCreateResponse(CamelVO):
     task_id: UUID

@@ -34,6 +34,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     "code": 401,
                     "data": None,
                     "message": "未登录",
+                    "errorCode": None,
                     "timestamp": int(time.time() * 1000),
                 },
             )
@@ -48,6 +49,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                     "code": 401,
                     "data": None,
                     "message": "登录已过期",
+                    "errorCode": None,
                     "timestamp": int(time.time() * 1000),
                 },
             )
