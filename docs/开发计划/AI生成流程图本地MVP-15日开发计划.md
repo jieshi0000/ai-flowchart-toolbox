@@ -122,7 +122,7 @@ git push origin feat/dXX-short-name
 | D09 `feat/d09-celery-engine` | `feat: 接入Celery Worker和Beat`；`feat: 实现本地任务状态机`；`feat: 实现供应商调用任务`；`feat: 实现超时取消重试和补偿扫描` | 成功、失败、超时、取消均能进入确定终态；真实调用失败不切换 Mock。 |
 | D10 `feat/d10-task-events` | `feat: 实现Redis任务事件发布`；`feat: 实现任务SSE接口`；`feat: 实现前端SSE和轮询降级`；`feat: 实现任务刷新恢复和离开确认` | SSE 断开后每 2 秒轮询；刷新不重复提交；任务结束后停止监听。 |
 | D11 `feat/d11-workbench-ui` | `feat: 实现流程图工作台布局`；`feat: 实现描述输入和内置模板`；`feat: 实现方向粒度和模型选择`；`feat: 实现任务状态栏和异常反馈` | 空态、提交、处理、成功、失败、取消、无模型状态均具备中文反馈。 |
-| D12 `feat/d12-canvas-editor` | `feat: 实现React Flow六类节点`；`feat: 实现节点和连线编辑`；`feat: 实现dagre自动布局`；`feat: 实现撤销重做和脏状态`；`feat: 实现Mermaid实时同步` | 50 节点、100 连线内可正常拖拽、缩放、编辑、布局和撤销。 |
+| D12 `feat/d12-canvas-editor` | `feat: 实现React Flow六类节点`；`feat: 实现节点和连线编辑`；`feat: 实现dagre自动布局`；`feat: 实现撤销重做和脏状态`；`feat: 实现Mermaid只读导出预览` | 50 节点、100 连线内可正常拖拽、缩放、编辑、布局和撤销。 |
 | D13 `feat/d13-document-storage` | `feat: 实现文档查询和保存`；`feat: 实现文档版本乐观锁`；`feat: 实现MinIO存储适配器`；`feat: 实现Mermaid和JSON导出` | 保存后版本递增；版本冲突返回最新文档；导出文件具有用户归属和有效期。 |
 | D14 `feat/d14-render-security` | `feat: 构建Chromium导出Worker`；`feat: 实现SVG导出`；`feat: 实现PNG导出`；`feat: 实现鉴权下载和过期清理`；`feat: 预留广场身份额度和用量接口` | 四类导出有效；非本人无法下载；过期文件被清理；本地模式不调用广场。 |
 | D15 `feat/d15-provider-integration` | `test: 完成DeepSeek Chat Completions真实联调`；`test: 完成DeepSeek Responses真实联调`；`test: 完成DeepSeek完整生成链路验收`；每个问题分别使用 `fix(provider): ...` 提交；最后提交 `docs: 完善本地部署和供应商配置手册` | DeepSeek Chat、Responses 各完成一条真实短请求，默认链路使用 `deepseek-v4-flash`；画布编辑、保存、刷新、取消、重试和四类导出全部通过；其他 Provider 完成 Mock 契约测试，不作为本轮真实联调门槛。 |
