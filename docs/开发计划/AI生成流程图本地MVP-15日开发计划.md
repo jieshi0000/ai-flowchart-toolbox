@@ -121,10 +121,10 @@ git push origin feat/dXX-short-name
 | D08 `feat/d08-task-api` | `feat: 实现生成任务创建和查询`；`feat: 实现任务幂等控制`；`feat: 实现任务取消和重试`；`feat: 实现用户资源隔离和业务错误码` | 创建接口 1 秒内返回 taskId；重复提交不重复调用供应商；非本人访问被拒绝。 |
 | D09 `feat/d09-celery-engine` | `feat: 接入Celery Worker和Beat`；`feat: 实现本地任务状态机`；`feat: 实现供应商调用任务`；`feat: 实现超时取消重试和补偿扫描` | 成功、失败、超时、取消均能进入确定终态；真实调用失败不切换 Mock。 |
 | D10 `feat/d10-task-events` | `feat: 实现Redis任务事件发布`；`feat: 实现任务SSE接口`；`feat: 实现前端SSE和轮询降级`；`feat: 实现任务刷新恢复和离开确认` | SSE 断开后每 2 秒轮询；刷新不重复提交；任务结束后停止监听。 |
-| D11 `feat/d11-workbench-ui` | `feat: 实现流程图工作台布局`；`feat: 实现描述输入和内置模板`；`feat: 实现方向粒度和模型选择`；`feat: 实现任务状态栏和异常反馈` | 空态、提交、处理、成功、失败、取消、无模型状态均具备中文反馈。 |
-| D12 `feat/d12-canvas-editor` | `feat: 实现React Flow六类节点`；`feat: 实现节点和连线编辑`；`feat: 实现dagre自动布局`；`feat: 实现撤销重做和脏状态`；`feat: 实现Mermaid只读导出预览` | 50 节点、100 连线内可正常拖拽、缩放、编辑、布局和撤销。 |
-| D13 `feat/d13-document-storage` | `feat: 实现文档查询和保存`；`feat: 实现文档版本乐观锁`；`feat: 实现MinIO存储适配器`；`feat: 实现Mermaid和JSON导出` | 保存后版本递增；版本冲突返回最新文档；导出文件具有用户归属和有效期。 |
-| D14 `feat/d14-render-security` | `feat: 构建Chromium导出Worker`；`feat: 实现SVG导出`；`feat: 实现PNG导出`；`feat: 实现鉴权下载和过期清理`；`feat: 预留广场身份额度和用量接口` | 四类导出有效；非本人无法下载；过期文件被清理；本地模式不调用广场。 |
+| D11 `feat/d11-workbench-ui` | `feat: 实现流程图工作台布局`；`feat: 实现描述输入和内置模板`；`feat: 实现方向粒度和模型选择`；`feat: 实现任务状态栏和异常反馈`；`feat: 增加Provider加载失败非阻塞通知`；`feat: 增加Provider错误码友好中文映射和网络配置提示` | 空态、提交、处理、成功、失败、取消、无模型状态均具备中文反馈；Provider 加载失败时显示黄色非阻塞通知“当前默认供应商响应异常，正在尝试降级/路由”；`provider_unavailable` 显示“上游服务繁忙，请稍后重试”；不阻塞工作台输入，不暴露 Key 或 Base URL。 |
+| D12 `feat/d12-canvas-editor` | `feat: 实现React Flow六类节点`；`feat: 实现节点和连线编辑`；`feat: 实现dagre自动布局`；`feat: 限制节点坐标和fitView范围`；`feat: 实现撤销重做和脏状态`；`feat: 使用zundo限制撤销重做历史快照`；`feat: 实现Mermaid只读预览窗格` | 50 节点、100 连线内可正常拖拽、缩放、编辑、布局和撤销；布局后节点 X/Y 均限制在 `[-10000, 10000]`，并在节点渲染完成后调用 `fitView({ padding: 0.2, minZoom: 0.5, maxZoom: 1.5 })`；历史最多保留 30 个快照。 |
+| D13 `feat/d13-document-storage` | `feat: 实现文档查询和保存`；`feat: 实现文档版本乐观锁`；`feat: 实现保存后异步Mermaid编译状态`；`feat: 实现MinIO存储适配器`；`feat: 实现Mermaid和JSON导出` | 正式保存只接收 `diagramData`，先完成版本落库再异步编译 Mermaid；编译失败不回滚已保存的流程图数据，预览显示友好失败状态；版本冲突返回最新文档；导出文件具有用户归属和有效期。 |
+| D14 `feat/d14-render-security` | `feat: 构建Chromium导出Worker`；`chore: 安装导出字体并刷新字体缓存`；`feat: 固定Chromium导出超时和进程清理`；`feat: 实现SVG导出`；`feat: 实现PNG导出`；`feat: 实现鉴权下载和过期清理`；`feat: 预留广场身份额度和用量接口` | 中文字体不出现方块；Chromium 渲染超时 30 秒后终止页面和浏览器进程并返回 `EXPORT_RENDER_FAILED`；四类导出有效；非本人无法下载；过期文件被清理；本地模式不调用广场。 |
 | D15 `feat/d15-provider-integration` | `test: 完成DeepSeek Chat Completions真实联调`；`test: 完成DeepSeek Responses真实联调`；`test: 完成DeepSeek完整生成链路验收`；每个问题分别使用 `fix(provider): ...` 提交；最后提交 `docs: 完善本地部署和供应商配置手册` | DeepSeek Chat、Responses 各完成一条真实短请求，默认链路使用 `deepseek-v4-flash`；画布编辑、保存、刷新、取消、重试和四类导出全部通过；其他 Provider 完成 Mock 契约测试，不作为本轮真实联调门槛。 |
 
 ## 四、固定接口与公共类型
@@ -199,7 +199,12 @@ subprocess
 - 合法循环边允许存在。
 - HTML、脚本、事件属性和 Mermaid 特殊字符必须转义。
 
-`diagramData` 是唯一权威数据。`mermaidSource` 只能由后端编译，保存接口不接受客户端直接覆盖。
+`diagramData` 是唯一权威数据。`mermaidSource` 只能由后端编译，正式保存接口不接受客户端直接覆盖。
+
+- 正式保存请求只提交 `diagramData` 和乐观锁版本，不提交客户端 `mermaidSource`。
+- 保存先持久化已通过 Schema 校验的 `diagramData` 并递增版本，再由 Celery 异步编译 Mermaid；编译状态写入已有 `flowchart_event.payload`，不新增跨表外键。
+- Mermaid 编译成功时才更新 `mermaid_source`；编译失败不得回滚已保存的 `diagramData`，文档查询返回最近一次成功源码和脱敏的编译状态。
+- `force_save_mermaid` 不属于正式前端 API 契约；仅允许在本地调试开关明确开启时由服务端调试工具使用，非本地模式和普通用户请求一律拒绝。
 
 ### 4.4 任务状态
 
@@ -246,6 +251,7 @@ PROMPT_EMPTY
 PROMPT_TOO_LONG
 PROVIDER_NOT_CONFIGURED
 PROVIDER_UNHEALTHY
+PROVIDER_UNAVAILABLE
 PROVIDER_AUTH_FAILED
 PROVIDER_RATE_LIMITED
 PROVIDER_SUBMIT_FAILED
@@ -403,8 +409,12 @@ healthCheck
 - 使用 Zustand 管理文档、任务、Provider、历史快照和脏状态。
 - 使用 `@xyflow/react` 实现画布。
 - 使用 dagre 实现 TB/LR 自动布局。
-- 使用 Mermaid 进行只读源码预览。
+- 使用 Mermaid 进行只读源码预览；预览内容只来自后端最近一次成功编译结果，不参与双向绑定。
 - 模型选择器显示 `displayName`；`providerId` 只作为内部值，不作为用户可见名称。
+- Provider 列表加载失败、默认 Provider 不健康或路由切换时，显示可关闭的黄色非阻塞通知：`当前默认供应商响应异常，正在尝试降级/路由`；通知不阻塞输入和画布编辑。
+- 前端将 `provider_unavailable`、`PROVIDER_UNAVAILABLE` 统一映射为 `上游服务繁忙，请稍后重试`，不得直接显示技术错误码；网络或本地 Provider 配置提示只能显示为“请检查网络连接或服务端配置”，不得显示实际 Base URL。
+- `applyLayout` 先将所有节点坐标限制在 `[-10000, 10000]`，再提交 React Flow 状态；等待节点完成渲染后调用 `fitView({ padding: 0.2, minZoom: 0.5, maxZoom: 1.5 })`，禁止在旧节点状态上提前调用。
+- Zustand 历史使用成熟的 `zundo` temporal middleware 或等价现有实现，`limit` 固定为 30；只记录可恢复的 `diagramData`，去重连续相同快照，不保存 Provider、SSE 和临时 UI 状态。
 - SSE 使用 `fetch` 流式读取，以便安全携带认证请求头。
 - `taskId`、`documentId` 使用应用命名空间保存到 `localStorage`。
 - 不把供应商 Key、Base URL 或 `providerRequestId` 保存到前端。
@@ -431,6 +441,7 @@ V6 写入系统内置模板。
 - `user_id` 使用 `VARCHAR(64)`，兼容本地 UUID 和未来广场用户 ID。
 - 不增加数据库外键，应用层保证一致性。
 - `diagram_data` 使用 JSONB。
+- `mermaid_source` 只保存后端最近一次成功编译结果；编译中的版本和失败原因写入 `flowchart_event.payload`，不把客户端 Mermaid 文本写入文档权威字段。
 - Provider Key 和供应商完整请求正文不得入库。
 - 已执行的 V1-V4 不得修改。
 
@@ -444,6 +455,8 @@ V6 写入系统内置模板。
 - 下载必须校验用户归属。
 - 文件名移除路径分隔符、控制字符和系统保留名称。
 - Chromium Worker 使用项目内 Inter 和 Source Han Sans SC 字体。
+- 当前脚手架后端基于 `python:3.12-slim`（Debian），渲染 Worker 使用 Debian 安装方式：`apt-get install --no-install-recommends fontconfig fonts-dejavu-core`，复制 `fonts/Inter` 和 `fonts/SourceHanSansSC-Regular.otf` 到 `/usr/share/fonts/` 后执行 `fc-cache -fv`；只有明确切换到 Alpine 基础镜像时才使用 `apk add fontconfig ttf-dejavu`，禁止混用两套命令。
+- Chromium 页面和浏览器上下文的单次渲染超时固定为 `30000ms`；超时必须关闭页面、上下文和浏览器进程，清理临时文件，并映射为 `EXPORT_RENDER_FAILED`。
 - Mermaid 使用严格安全模式，禁止 HTML 和脚本执行。
 
 ### 5.8 本地部署
@@ -508,9 +521,12 @@ UsageReporter
 - 三种 Provider 协议的请求映射。
 - 三种 Provider 协议的响应解析。
 - Provider 配置校验和路由，包括 `displayName` 与 `model` 一致性校验。
+- `provider_unavailable`、`PROVIDER_UNAVAILABLE` 到友好中文提示的统一映射。
 - 401、403、429、5xx、超时、空结果、非法 JSON。
 - 任务状态机、幂等、取消和重试。
+- 节点坐标边界、`fitView` 参数和 30 条历史快照上限。
 - 文档版本冲突。
+- Mermaid 异步编译成功、失败和已保存 `diagramData` 保留。
 - 文件路径、格式、MIME 和用户归属。
 
 ### 6.2 HTTP 契约测试
@@ -537,7 +553,9 @@ UsageReporter
 - Redis 事件和 SSE。
 - 任务刷新恢复。
 - 文档保存和版本冲突。
+- Mermaid 异步编译失败时文档 `diagramData` 仍可查询，`flowchart_event.payload` 返回脱敏失败状态。
 - 四类导出。
+- Chromium 中文字体加载、中文 glyph 渲染和 30 秒超时后的进程清理。
 - 文件鉴权和过期清理。
 - Worker 或 Beat 重启后的任务补偿。
 
@@ -548,14 +566,16 @@ UsageReporter
 - admin 登录。
 - 描述输入和模板填充。
 - Provider、模型选择；同名模型只展示一个选项，页面不显示 `providerId`。
+- Provider 加载失败时黄色非阻塞通知、降级/路由提示和 `provider_unavailable` 友好文案。
 - 创建、取消和重试任务。
 - SSE 断开后的轮询。
 - 刷新后恢复任务和文档。
 - 节点新增、删除、复制、拖拽。
 - 连线新增、删除和编辑。
 - TB/LR 自动布局。
-- 撤销、重做和未保存提示。
-- Mermaid 同步。
+- 极端节点坐标被限制在 `[-10000, 10000]`，布局完成后 `fitView` 不超出 `0.5-1.5` 缩放范围。
+- 撤销、重做和未保存提示；连续编辑超过 30 次后历史仍只保留最近 30 个快照。
+- Mermaid 只读预览、编译中状态和编译失败状态；前端不能反向覆盖源码。
 - 四类导出和下载。
 - 桌面和移动视口无重叠、无文本溢出。
 
@@ -581,9 +601,11 @@ D15 在用户提供的未跟踪本地配置下执行：
 - 创建任务接口 1 秒内返回 `taskId` 或明确错误。
 - 点击生成后 1 秒内显示任务状态。
 - 50 节点、100 连线内可以正常操作。
+- 50 节点、100 连线的大文档连续编辑不因历史快照无限增长而导致浏览器内存持续上升。
 - 不出现忙轮询。
 - SSE 不可用时固定每 2 秒查询本地任务。
 - Provider 总超时默认 600 秒，可由配置覆盖。
+- Chromium 单次渲染超时固定 30 秒，超时后不残留浏览器进程或临时文件。
 - 任务进度不倒退。
 - 刷新和重试不产生重复任务或重复供应商调用。
 
