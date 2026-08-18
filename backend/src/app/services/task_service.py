@@ -172,6 +172,7 @@ async def create_task(
     task = FlowchartTask(
         id=uuid_utils.uuid7(),
         user_id=user_id,
+        session_id=request.session_id,
         type=request.type.value,
         status=TaskStatus.WAITING.value,
         progress=5,
@@ -205,6 +206,29 @@ async def get_task(
     task_id: UUID,
 ) -> TaskStatusResponse:
     return _to_status_response(await _get_owned_task(session, user_id, task_id))
+
+
+async def list_recoverable_tasks(
+    session: AsyncSession,
+    user_id: str,
+    *,
+    session_id: str | None = None,
+    limit: int = 1,
+) -> list[TaskStatusResponse]:
+    """返回当前用户尚未结束的最近任务，用于浏览器状态丢失后的恢复。
+
+    ``session_id`` 只缩小恢复范围，绝不替代 ``user_id`` 的资源归属校验。
+    """
+
+    statement = select(FlowchartTask).where(
+        FlowchartTask.user_id == user_id,
+        FlowchartTask.status.not_in([status.value for status in TERMINAL_TASK_STATUSES]),
+    )
+    if session_id is not None:
+        statement = statement.where(FlowchartTask.session_id == session_id)
+    statement = statement.order_by(FlowchartTask.created_at.desc()).limit(limit)
+    result = await session.execute(statement)
+    return [_to_status_response(task) for task in result.scalars().all()]
 
 
 async def cancel_task(
@@ -291,6 +315,7 @@ async def retry_task(
             detail_level=snapshot.get("detail_level", "standard"),
             provider_id=snapshot.get("provider_id"),
             model=snapshot.get("model"),
+            session_id=snapshot.get("session_id") or source_task.session_id,
             idempotency_key=str(uuid_utils.uuid7()),
         )
     except (KeyError, ValidationError) as exc:
@@ -348,5 +373,6 @@ __all__ = [
     "cancel_task",
     "create_task",
     "get_task",
+    "list_recoverable_tasks",
     "retry_task",
 ]

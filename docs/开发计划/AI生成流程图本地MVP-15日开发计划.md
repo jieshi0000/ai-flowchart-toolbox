@@ -112,7 +112,7 @@ git push origin feat/dXX-short-name
 | 天数与分支 | 独立需求提交，每项完成后立即推送 | 当日验收 |
 |---|---|---|
 | D01 `feat/d01-project-baseline` | `chore: 初始化AI流程图前后端依赖`；`fix: 修正Umi和FastAPI本地启动配置`；`chore: 新增本地全栈Compose骨架`；`feat: 建立流程图工作台入口` | admin 登录、健康检查、前端构建、Compose 配置通过；商品和权限演示入口隐藏但代码保留。 |
-| D02 `feat/d02-domain-model` | `feat: 定义DiagramDocument领域契约`；`feat: 定义任务供应商和导出契约`；`feat: 新增AI流程图业务表迁移`；`feat: 新增内置流程模板种子` | V5/V6 可从已有 V1-V4 正常升级；Schema 边界测试通过。 |
+| D02 `feat/d02-domain-model` | `feat: 定义DiagramDocument领域契约`；`feat: 定义任务供应商和导出契约`；`feat: 新增AI流程图业务表迁移`；`feat: 新增内置流程模板种子`；`feat: 补充任务浏览器会话恢复字段` | V5/V6 可从已有 V1-V4 正常升级；后续 V7 可从 V1-V6 增量升级，旧任务允许 `session_id` 为空；恢复查询始终按 `user_id` 隔离，Schema 边界测试通过。 |
 | D03 `feat/d03-diagram-engine` | `feat: 实现DiagramDocument校验器`；`feat: 实现安全Mermaid编译器`；`test: 增加流程图安全与边界测试` | 六类节点、TB/LR、循环边、节点与连线限制、脚本转义测试通过。 |
 | D04 `feat/d04-provider-core` | `feat: 实现供应商配置清单加载`；`feat: 实现Provider注册中心和统一协议`；`feat: 实现统一httpx传输层`；`feat: 提供供应商公开列表接口` | 配置校验、能力筛选、超时和日志脱敏测试通过；响应不暴露 Key 和 Base URL。 |
 | D05 `feat/d05-anthropic-provider` | `feat: 实现Anthropic Messages适配器`；`feat: 实现Anthropic结构化输出约束`；`feat: 实现Anthropic响应解析和错误映射` | 成功、401、429、5xx、超时、内容拒绝、空结果和非法 JSON 契约测试通过。 |
@@ -125,7 +125,7 @@ git push origin feat/dXX-short-name
 | D12 `feat/d12-canvas-editor` | `feat: 实现React Flow六类节点`；`feat: 实现节点和连线编辑`；`feat: 实现dagre自动布局`；`feat: 限制节点坐标和fitView范围`；`feat: 实现撤销重做和脏状态`；`feat: 使用zundo限制撤销重做历史快照`；`feat: 实现Mermaid只读预览窗格` | 50 节点、100 连线内可正常拖拽、缩放、编辑、布局和撤销；布局后节点 X/Y 均限制在 `[-10000, 10000]`，并在节点渲染完成后调用 `fitView({ padding: 0.2, minZoom: 0.5, maxZoom: 1.5 })`；历史最多保留 30 个快照。 |
 | D13 `feat/d13-document-storage` | `feat: 实现文档查询和保存`；`feat: 实现文档版本乐观锁`；`feat: 实现保存后异步Mermaid编译状态`；`feat: 实现MinIO存储适配器`；`feat: 实现Mermaid和JSON导出` | 正式保存只接收 `diagramData`，先完成版本落库再异步编译 Mermaid；编译失败不回滚已保存的流程图数据，预览显示友好失败状态；版本冲突返回最新文档；导出文件具有用户归属和有效期。 |
 | D14 `feat/d14-render-security` | `feat: 构建Chromium导出Worker`；`chore: 安装导出字体并刷新字体缓存`；`feat: 固定Chromium导出超时和进程清理`；`feat: 实现SVG导出`；`feat: 实现PNG导出`；`feat: 实现鉴权下载和过期清理`；`feat: 预留广场身份额度和用量接口` | 中文字体不出现方块；Chromium 渲染超时 30 秒后终止页面和浏览器进程并返回 `EXPORT_RENDER_FAILED`；四类导出有效；非本人无法下载；过期文件被清理；本地模式不调用广场。 |
-| D15 `feat/d15-provider-integration` | `test: 完成DeepSeek Chat Completions真实联调`；`test: 完成DeepSeek Responses真实联调`；`test: 完成DeepSeek完整生成链路验收`；每个问题分别使用 `fix(provider): ...` 提交；最后提交 `docs: 完善本地部署和供应商配置手册` | DeepSeek Chat、Responses 各完成一条真实短请求，默认链路使用 `deepseek-v4-flash`；画布编辑、保存、刷新、取消、重试和四类导出全部通过；其他 Provider 完成 Mock 契约测试，不作为本轮真实联调门槛。 |
+| D15 `feat/d15-provider-integration` | `test: 完成DeepSeek Chat Completions真实联调`；`test: 完成DeepSeek Responses真实联调`；`test: 完成DeepSeek完整生成链路验收`；`feat: 清理等待或提交超时的僵尸任务`；每个问题分别使用 `fix(provider): ...` 提交；最后提交 `docs: 完善本地部署和供应商配置手册` | DeepSeek Chat、Responses 各完成一条真实短请求，默认链路使用 `deepseek-v4-flash`；Beat 将 `waiting`、`submitting` 且创建超过 1 小时的任务置为 `expired`；画布编辑、保存、刷新、取消、重试和四类导出全部通过；其他 Provider 完成 Mock 契约测试，不作为本轮真实联调门槛。 |
 
 ## 四、固定接口与公共类型
 
@@ -139,6 +139,7 @@ GET  /api/flowchart/templates/list
 
 POST /api/flowchart/tasks/create
 GET  /api/flowchart/tasks/get?taskId=...
+GET  /api/flowchart/tasks/list?sessionId=...
 GET  /api/flowchart/tasks/events?taskId=...
 POST /api/flowchart/tasks/cancel?taskId=...
 POST /api/flowchart/tasks/retry?taskId=...
@@ -160,6 +161,7 @@ GET  /api/flowchart/files/download?fileId=...
   "detailLevel": "standard",
   "providerId": null,
   "model": null,
+  "sessionId": "浏览器生成的随机UUID",
   "idempotencyKey": "客户端生成的随机UUID"
 }
 ```
@@ -169,6 +171,8 @@ GET  /api/flowchart/files/download?fileId=...
 - `prompt` 长度为 1-4000。
 - `direction` 只允许 `TB`、`LR`。
 - `detailLevel` 只允许 `concise`、`standard`、`detailed`。
+- 新版工作台创建任务时必须传入 `sessionId`；它只用于同一浏览器会话的恢复关联，不能替代后端 `user_id` 的资源授权。
+- 页面本地任务 ID 丢失时，先按 `sessionId` 查询未结束任务；没有命中时按当前登录用户查询最近未结束任务，避免任务成为孤儿。
 - `providerId` 为空时自动路由。
 - 前端模型选择器显示 Provider 的 `displayName`，提交时将对应值写入 `model`。
 - 同一模型存在多个协议配置时，前端按 `displayName` 合并为一个模型选项，并保持 `providerId` 为空，由后端按路由规则选择具体协议。

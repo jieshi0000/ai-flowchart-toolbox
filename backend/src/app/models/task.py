@@ -13,6 +13,7 @@ class FlowchartTask(BaseDBModel):
     __tablename__ = "flowchart_task"
 
     user_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    session_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     type: Mapped[str] = mapped_column(String(40), nullable=False)
     status: Mapped[str] = mapped_column(String(32), nullable=False, default="waiting")
     progress: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

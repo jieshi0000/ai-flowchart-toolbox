@@ -363,12 +363,13 @@ interface TaskStatus {
 
 刷新恢复逻辑：
 
-1. 页面加载时读取本地保存的 taskId 和 documentId。
-2. 调用 GET /api/flowchart/tasks/{taskId} 查询本地任务。
-3. 任务未结束时优先重新建立 SSE；连接失败时每 2 秒轮询本系统任务接口。
-4. 任务成功时读取 documentId 并加载 DiagramDocument。
-5. 任务失败时显示错误原因和重试按钮。
-6. 页面关闭前，如存在未保存编辑或未结束任务，显示确认提示。
+1. 页面加载时读取本地保存的 taskId、documentId 和浏览器会话关联 ID。
+2. 有 taskId 时调用 GET /api/flowchart/tasks/{taskId} 查询本地任务；无 taskId 时先按 sessionId 查询当前用户的未结束任务，再退回当前用户最近未结束任务。
+3. sessionId 只用于恢复关联，用户归属始终由后端 user_id 校验，不能作为授权凭据或在线心跳。
+4. 任务未结束时优先重新建立 SSE；连接失败时每 2 秒轮询本系统任务接口。
+5. 任务成功时读取 documentId 并加载 DiagramDocument。
+6. 任务失败时显示错误原因和重试按钮。
+7. 页面关闭前，如存在未保存编辑或未结束任务，显示确认提示。
 
 ### 4.4 工具面板交互细则
 

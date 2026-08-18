@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from types import SimpleNamespace
+from unittest.mock import Mock
 from uuid import uuid4
 
 import pytest
@@ -72,6 +73,18 @@ def test_current_user_uses_local_header_only_when_auth_is_disabled(monkeypatch):
     )
 
     assert user_id == "local-user-a"
+
+
+def test_task_enqueue_is_deferred_from_the_request_path(monkeypatch):
+    loop = Mock()
+    callback = Mock()
+    task_id = uuid4()
+    monkeypatch.setattr(task_api.asyncio, "get_running_loop", lambda: loop)
+
+    task_api._enqueue_in_background(callback, task_id)
+
+    loop.run_in_executor.assert_called_once_with(None, callback, task_id)
+    callback.assert_not_called()
 
 
 @pytest.mark.asyncio
