@@ -16,6 +16,7 @@ from app.api.auth_api import router as auth_router
 from app.api.public_api import router as public_router
 from app.api.provider_api import router as provider_router
 from app.api.task_api import router as task_router
+from app.api.template_api import router as template_router
 from app.middleware.auth import AuthMiddleware
 from app.providers.provider_registry import close_provider_registry
 
@@ -51,7 +52,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title=settings.app.name, debug=settings.app.debug, lifespan=lifespan)
 
-for router in (demo_router, auth_router, public_router, provider_router, task_router):
+for router in (demo_router, auth_router, public_router, provider_router, template_router, task_router):
     for route in router.routes:
         if isinstance(route, APIRoute):
             route.response_model_by_alias = settings.app.json_camel_case
@@ -64,6 +65,7 @@ app.include_router(demo_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(public_router, prefix="/api")
 app.include_router(provider_router, prefix="/api")
+app.include_router(template_router, prefix="/api")
 app.include_router(task_router, prefix="/api")
 
 logger.info("Application startup", name=settings.app.name, debug=settings.app.debug)

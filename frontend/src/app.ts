@@ -3,6 +3,28 @@ import { getMe, getPublicConfig } from '@/services/demo/auth';
 import { history } from '@umijs/max';
 import { message } from 'antd';
 
+function providerErrorMessage(errorCode: unknown): string | undefined {
+  const normalizedCode = String(errorCode ?? '').toUpperCase();
+  switch (normalizedCode) {
+    case 'PROVIDER_UNAVAILABLE':
+    case '502':
+      return '上游服务繁忙，请稍后重试';
+    case 'PROVIDER_UNHEALTHY':
+    case '503':
+      return '当前默认供应商暂不可用，请稍后重试';
+    case 'PROVIDER_RATE_LIMITED':
+    case '429':
+      return '当前生成请求较多，请稍后重试';
+    case 'PROVIDER_NOT_CONFIGURED':
+    case 'PROVIDER_AUTH_FAILED':
+    case 'PROVIDER_SUBMIT_FAILED':
+    case 'PROVIDER_POLL_FAILED':
+      return '请检查网络连接或服务端配置';
+    default:
+      return undefined;
+  }
+}
+
 // 全局初始化数据配置，用于 Layout 用户信息和权限初始化
 export async function getInitialState(): Promise<{
   currentUser?: API.UserInfo;
@@ -69,14 +91,23 @@ export const request = {
       return {
         success: resData.code === 200,
         errorMessage: resData.message || '请求失败',
-        errorCode: resData.code,
+        // 同时保留业务错误码与数值 code，页面可做稳定的用户提示，旧的全局处理仍可按 code 分支。
+        code: resData.code,
+        message: resData.message,
+        errorCode: resData.errorCode || resData.code,
         data: resData.data,
       };
     },
     // 错误统一处理
     errorHandler: (error: any) => {
       const { response, data } = error;
-      const errorCode = data?.code || response?.status;
+      const errorCode = data?.errorCode || data?.code || response?.status;
+
+      const friendlyProviderMessage = providerErrorMessage(errorCode);
+      if (friendlyProviderMessage) {
+        message.error(friendlyProviderMessage);
+        throw error;
+      }
 
       // 401 未认证：后端返回 HTTP 200 + body.code=401
       if (errorCode === 401) {

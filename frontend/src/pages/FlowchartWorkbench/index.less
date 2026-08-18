@@ -1,20 +1,408 @@
 .workbench {
+  display: flex;
   min-height: calc(100vh - 48px);
-  padding: 24px;
-  background: #f5f7fa;
-}
-
-.emptyState {
-  display: grid;
-  min-height: calc(100vh - 96px);
-  place-items: center;
-  align-content: center;
+  height: calc(100dvh - 48px);
+  flex-direction: column;
   gap: 12px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
+  padding: 16px;
+  overflow: hidden;
+  box-sizing: border-box;
+  background: #eef2f3;
+  color: #20262d;
 }
 
-.icon {
-  color: #1677ff;
-  font-size: 44px;
+.header,
+.modeBar,
+.promptPanel,
+.previewPanel,
+.detailPanel,
+.taskBar {
+  min-width: 0;
+  border: 1px solid #d9e1e3;
+  border-radius: 6px;
+  background: #ffffff;
+}
+
+.header {
+  display: flex;
+  min-height: 68px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+}
+
+.titleGroup,
+.headerStatus,
+.panelHeader,
+.previewHeader,
+.templateItemTop,
+.taskProgress,
+.taskActions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+}
+
+.titleGroup {
+  gap: 10px;
+}
+
+.titleGroup :global(.ant-typography) {
+  margin: 0;
+}
+
+.logoMark {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border: 1px solid #9cc7c0;
+  border-radius: 6px;
+  background: #e8f4f1;
+  color: #0f766e;
+  font-size: 20px;
+}
+
+.headerStatus {
+  flex: 0 0 auto;
+  gap: 8px;
+  color: #0f766e;
+}
+
+.modeBar {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  padding: 7px 10px;
+}
+
+.modeBar :global(.ant-segmented) {
+  max-width: 100%;
+}
+
+.providerNotice {
+  border-radius: 6px;
+}
+
+.workspace {
+  display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(260px, 320px) minmax(360px, 1fr) minmax(
+      220px,
+      280px
+    );
+  overflow: hidden;
+}
+
+.promptPanel,
+.previewPanel,
+.detailPanel {
+  min-height: 0;
+  border-radius: 0;
+}
+
+.promptPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.previewPanel {
+  display: grid;
+  min-width: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  border-right: 0;
+  border-left: 0;
+}
+
+.detailPanel {
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.panelHeader,
+.previewHeader {
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.fieldLabel {
+  color: #52606d;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.optionGroup {
+  display: grid;
+  gap: 7px;
+}
+
+.optionGroup :global(.ant-select) {
+  width: 100%;
+}
+
+.inlineWarning {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.generateButton {
+  width: 100%;
+}
+
+.templateSection {
+  display: grid;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.templateList {
+  display: grid;
+  gap: 7px;
+}
+
+.templateItem {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  gap: 5px;
+  padding: 9px 10px;
+  overflow: hidden;
+  border: 1px solid #d8e3e2;
+  border-radius: 5px;
+  background: #fbfdfd;
+  color: #3c4b52;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1.45;
+  text-align: left;
+  word-break: break-word;
+}
+
+.templateItem:hover,
+.templateItem:focus-visible {
+  border-color: #4f9b91;
+  outline: none;
+  background: #eff8f6;
+}
+
+.templateItemTop {
+  justify-content: space-between;
+  gap: 8px;
+  color: #20262d;
+}
+
+.templateItemTop :global(.ant-tag) {
+  margin-inline-end: 0;
+  white-space: nowrap;
+}
+
+.previewHeader {
+  min-height: 54px;
+  padding: 0 16px;
+  border-bottom: 1px solid #e2e8e8;
+}
+
+.previewContent {
+  display: grid;
+  min-height: 0;
+  place-items: center;
+  padding: 24px;
+  background: #f8fbfa;
+}
+
+.processingState,
+.successState,
+.failureState {
+  display: grid;
+  max-width: min(420px, 100%);
+  justify-items: center;
+  gap: 10px;
+  padding: 20px;
+  text-align: center;
+}
+
+.processingState :global(.ant-typography),
+.successState :global(.ant-typography),
+.failureState :global(.ant-typography) {
+  margin: 0;
+  word-break: break-word;
+}
+
+.successState {
+  color: #0f766e;
+}
+
+.successState > :global(.anticon) {
+  font-size: 42px;
+}
+
+.failureState {
+  color: #b42318;
+}
+
+.detailList {
+  display: grid;
+  gap: 0;
+  margin: 12px 0 0;
+}
+
+.detailList > div {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 10px;
+  padding: 11px 0;
+  border-bottom: 1px solid #edf1f1;
+}
+
+.detailList dt {
+  color: #69777f;
+}
+
+.detailList dd {
+  min-width: 0;
+  margin: 0;
+  color: #27343a;
+  overflow-wrap: anywhere;
+}
+
+.taskBar {
+  display: flex;
+  flex: 0 0 auto;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 14px;
+}
+
+.taskProgress {
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 12px;
+}
+
+.progress {
+  width: clamp(120px, 18vw, 220px);
+  flex: 0 1 220px;
+}
+
+.taskProgress :global(.ant-typography) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.taskActions {
+  flex: 0 0 auto;
+  gap: 8px;
+}
+
+@media (max-width: 1180px) {
+  .workspace {
+    grid-template-columns: minmax(250px, 310px) minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) auto;
+  }
+
+  .detailPanel {
+    grid-column: 1 / -1;
+    border-top: 0;
+    border-radius: 0 0 6px 6px;
+  }
+
+  .detailList {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0 16px;
+  }
+
+  .detailList > div {
+    grid-template-columns: 76px minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 760px) {
+  .workbench {
+    height: auto;
+    min-height: 100vh;
+    gap: 8px;
+    padding: 8px;
+    overflow: visible;
+  }
+
+  .header {
+    min-height: 58px;
+    padding: 10px 12px;
+  }
+
+  .headerStatus {
+    font-size: 12px;
+  }
+
+  .modeBar {
+    overflow-x: auto;
+  }
+
+  .workspace {
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    overflow: visible;
+  }
+
+  .promptPanel,
+  .previewPanel,
+  .detailPanel {
+    border: 1px solid #d9e1e3;
+    border-radius: 6px;
+  }
+
+  .previewPanel,
+  .detailPanel {
+    margin-top: 8px;
+  }
+
+  .previewPanel {
+    min-height: 340px;
+  }
+
+  .detailPanel {
+    grid-column: auto;
+  }
+
+  .detailList {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .taskBar {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .taskProgress {
+    display: grid;
+    width: 100%;
+    gap: 6px;
+  }
+
+  .progress {
+    width: 100%;
+  }
+
+  .taskProgress :global(.ant-typography) {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .taskActions {
+    width: 100%;
+  }
 }
