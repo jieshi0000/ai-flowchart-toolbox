@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from 'react';
 import {
   FlowchartTask,
   FlowchartTaskStatus,
@@ -9,6 +8,7 @@ import {
   saveActiveDocumentId,
   saveActiveTaskId,
 } from '@/services/flowchart/taskStorage';
+import { useEffect, useRef, useState } from 'react';
 
 const POLLING_INTERVAL_MS = 2_000;
 const SSE_INACTIVITY_MS = 30_000;
@@ -43,7 +43,8 @@ export function useTaskMonitor({
   onTaskChange,
 }: UseTaskMonitorOptions): TaskMonitorResult {
   const [task, setTask] = useState<FlowchartTask | null>(null);
-  const [connectionMode, setConnectionMode] = useState<TaskConnectionMode>('idle');
+  const [connectionMode, setConnectionMode] =
+    useState<TaskConnectionMode>('idle');
   const onTaskChangeRef = useRef(onTaskChange);
 
   useEffect(() => {
@@ -74,6 +75,7 @@ export function useTaskMonitor({
       }
       if (isTerminalTaskStatus(nextTask.status)) {
         terminal = true;
+        setConnectionMode('idle');
         clearActiveTaskId();
         if (pollTimer !== undefined) {
           window.clearInterval(pollTimer);
@@ -191,7 +193,10 @@ export function useTaskMonitor({
 
 function parseTaskStatusEvent(frame: string): FlowchartTask | null {
   const lines = frame.split('\n');
-  const eventName = lines.find((line) => line.startsWith('event:'))?.slice(6).trim();
+  const eventName = lines
+    .find((line) => line.startsWith('event:'))
+    ?.slice(6)
+    .trim();
   if (eventName !== 'task-status') {
     return null;
   }

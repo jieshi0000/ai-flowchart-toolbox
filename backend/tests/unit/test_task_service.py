@@ -73,6 +73,7 @@ def _task(
     *,
     user_id: str = "user-a",
     status: str = "waiting",
+    session_id: str | None = "browser-session-a",
     idempotency_key: str = "idem-old",
     request_snapshot: dict | None = None,
 ) -> FlowchartTask:
@@ -80,6 +81,7 @@ def _task(
     return FlowchartTask(
         id=uuid4(),
         user_id=user_id,
+        session_id=session_id,
         type="diagram_generate",
         status=status,
         progress=5,
@@ -96,6 +98,7 @@ def _task(
         provider_id="provider-a",
         model_name="model-a",
         idempotency_key=idempotency_key,
+        poll_count=0,
         expires_at=now + timedelta(days=7),
     )
 
@@ -163,6 +166,31 @@ async def test_get_task_rejects_non_owner():
         await task_service.get_task(session, "user-b", task.id)
 
     assert exc_info.value.code == 403
+
+
+@pytest.mark.asyncio
+async def test_list_recoverable_tasks_is_scoped_to_session_when_requested():
+    task = _task(status="provider_processing", session_id="browser-session-a")
+
+    class SessionWithActiveTasks:
+        def __init__(self):
+            self.statements = []
+
+        async def execute(self, statement):
+            self.statements.append(statement)
+            return SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [task]))
+
+    session = SessionWithActiveTasks()
+    result = await task_service.list_recoverable_tasks(
+        session,
+        "user-a",
+        session_id="browser-session-a",
+    )
+
+    assert [item.task_id for item in result] == [task.id]
+    statement = str(session.statements[0])
+    assert "flowchart_task.session_id" in statement
+    assert "flowchart_task.user_id" in statement
 
 
 @pytest.mark.asyncio

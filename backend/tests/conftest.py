@@ -51,7 +51,8 @@ def uvicorn_server():
 
 @pytest.fixture
 async def client(uvicorn_server):
-    async with AsyncClient(base_url=APP_URL) as c:
+    # 回环测试服务不应继承开发机的 HTTP(S) 代理，避免首个请求被代理阻塞。
+    async with AsyncClient(base_url=APP_URL, trust_env=False) as c:
         yield c
 
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import Annotated
 from uuid import UUID
 
@@ -19,6 +20,7 @@ from app.schemas.task import (
     TaskCreateResponse,
     TaskRetryResponse,
     TaskStatusResponse,
+    normalize_session_id,
 )
 from app.services.event_service import (
     stream_task_events,
@@ -28,6 +30,7 @@ from app.services.task_service import (
     cancel_task,
     create_task,
     get_task,
+    list_recoverable_tasks,
     retry_task,
 )
 
@@ -80,6 +83,32 @@ async def get_flowchart_task(
     session: AsyncSession = Depends(get_session),
 ):
     return Result.success(data=await get_task(session, _current_user_id(request), task_id))
+
+
+@router.get(
+    "/list",
+    response_model=Result[list[TaskStatusResponse]],
+    summary="恢复当前用户未结束的流程图任务",
+)
+async def list_flowchart_tasks(
+    request: Request,
+    session_id: Annotated[str | None, Query(alias="sessionId", max_length=64)] = None,
+    limit: Annotated[int, Query(ge=1, le=10)] = 1,
+    session: AsyncSession = Depends(get_session),
+):
+    try:
+        normalized_session_id = normalize_session_id(session_id)
+    except ValueError as exc:
+        raise BusinessException(code=400, message="会话标识格式无效") from exc
+
+    return Result.success(
+        data=await list_recoverable_tasks(
+            session,
+            _current_user_id(request),
+            session_id=normalized_session_id,
+            limit=limit,
+        )
+    )
 
 
 @router.get(
@@ -162,10 +191,16 @@ def _enqueue_task_execution(task_id: UUID) -> None:
     # 延迟导入，API 单元测试和无 CONFIG_KEY 的文档/Schema 工具无需加载 Celery 配置。
     from app.workers.tasks import enqueue_task_execution
 
-    enqueue_task_execution(task_id)
+    _enqueue_in_background(enqueue_task_execution, task_id)
 
 
 def _enqueue_task_cancel(task_id: UUID) -> None:
     from app.workers.tasks import enqueue_task_cancel
 
-    enqueue_task_cancel(task_id)
+    _enqueue_in_background(enqueue_task_cancel, task_id)
+
+
+def _enqueue_in_background(callback, task_id: UUID) -> None:
+    """Celery 首次建连不能占用已提交任务的 HTTP 响应路径。"""
+
+    asyncio.get_running_loop().run_in_executor(None, callback, task_id)

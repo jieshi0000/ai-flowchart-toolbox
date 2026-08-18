@@ -77,11 +77,18 @@ class TestDiagramContract:
 
 class TestTaskProviderExportContracts:
     def test_task_request_aliases_and_bounds(self):
-        request = TaskCreateRequest(prompt="  生成流程  ", idempotencyKey="idem-1")
+        request = TaskCreateRequest(
+            prompt="  生成流程  ",
+            sessionId=" browser-session-1 ",
+            idempotencyKey="idem-1",
+        )
         assert request.prompt == "生成流程"
+        assert request.session_id == "browser-session-1"
         assert request.detail_level.value == "standard"
         with pytest.raises(ValidationError):
             TaskCreateRequest(prompt="x" * 4001, idempotencyKey="k")
+        with pytest.raises(ValidationError):
+            TaskCreateRequest(prompt="流程", sessionId="contains spaces", idempotencyKey="k")
 
     def test_provider_public_config_requires_same_display_name_and_model(self):
         config = ProviderConfig(
@@ -128,6 +135,7 @@ def test_provider_interface_is_abstract():
 def test_flowchart_orm_columns_match_append_only_table_contract():
     assert "updated_at" in FlowchartDocument.__table__.columns
     assert "updated_at" in FlowchartTask.__table__.columns
+    assert "session_id" in FlowchartTask.__table__.columns
     assert "updated_at" in FlowchartTemplate.__table__.columns
     for model in (FlowchartFile, FlowchartQuotaLog, FlowchartProviderCall, FlowchartEvent):
         assert "created_at" in model.__table__.columns
