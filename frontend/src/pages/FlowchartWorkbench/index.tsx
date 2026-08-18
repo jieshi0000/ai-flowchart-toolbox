@@ -2,7 +2,9 @@ import { useLeaveConfirmation } from '@/hooks/useLeaveConfirmation';
 import { isTerminalTaskStatus, useTaskMonitor } from '@/hooks/useTaskMonitor';
 import {
   AUTO_ROUTE_MODEL,
+  isDiagramDirty,
   useFlowchartWorkbenchStore,
+  type DiagramNode,
 } from '@/models/flowchart';
 import {
   cancelFlowchartTask,
@@ -49,6 +51,11 @@ import {
   Typography,
 } from 'antd';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useStore } from 'zustand';
+import DiagramCanvas from './components/DiagramCanvas';
+import { createUniqueNodeId } from './components/diagramFlow';
+import { MermaidPanel } from './components/MermaidPanel';
+import { NodePropertyPanel } from './components/NodePropertyPanel';
 import styles from './index.less';
 
 type BadgeStatus = 'default' | 'error' | 'processing' | 'success' | 'warning';
@@ -291,6 +298,20 @@ const FlowchartWorkbench: React.FC = () => {
   const providerNoticeDismissed = useFlowchartWorkbenchStore(
     (state) => state.providerNoticeDismissed,
   );
+  const diagramData = useFlowchartWorkbenchStore((state) => state.diagramData);
+  const selectedElement = useFlowchartWorkbenchStore(
+    (state) => state.selectedElement,
+  );
+  const mermaidSource = useFlowchartWorkbenchStore(
+    (state) => state.mermaidSource,
+  );
+  const mermaidStatus = useFlowchartWorkbenchStore(
+    (state) => state.mermaidStatus,
+  );
+  const mermaidError = useFlowchartWorkbenchStore(
+    (state) => state.mermaidError,
+  );
+  const hasUnsavedChanges = useFlowchartWorkbenchStore(isDiagramDirty);
   const setPrompt = useFlowchartWorkbenchStore((state) => state.setPrompt);
   const setDirection = useFlowchartWorkbenchStore(
     (state) => state.setDirection,
@@ -320,9 +341,29 @@ const FlowchartWorkbench: React.FC = () => {
   const dismissProviderNotice = useFlowchartWorkbenchStore(
     (state) => state.dismissProviderNotice,
   );
+  const setDiagramData = useFlowchartWorkbenchStore(
+    (state) => state.setDiagramData,
+  );
+  const resetDiagram = useFlowchartWorkbenchStore(
+    (state) => state.resetDiagram,
+  );
+  const setSelectedElement = useFlowchartWorkbenchStore(
+    (state) => state.setSelectedElement,
+  );
   const [isCreating, setIsCreating] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [activeMode, setActiveMode] = useState<'generate' | 'edit' | 'mermaid'>(
+    'generate',
+  );
   const restoreStarted = useRef(false);
+  const canUndo = useStore(
+    useFlowchartWorkbenchStore.temporal,
+    (state) => state.pastStates.length > 0,
+  );
+  const canRedo = useStore(
+    useFlowchartWorkbenchStore.temporal,
+    (state) => state.futureStates.length > 0,
+  );
 
   const onTaskChange = useCallback(
     (nextTask: FlowchartTask) => {
@@ -470,7 +511,7 @@ const FlowchartWorkbench: React.FC = () => {
     isCreating ||
     (Boolean(activeTaskId) && (!task || !isTerminalTaskStatus(task.status)));
 
-  useLeaveConfirmation({ hasRunningTask });
+  useLeaveConfirmation({ hasRunningTask, hasUnsavedChanges });
 
   const handleGenerate = async () => {
     if (!canGenerate) {
@@ -560,6 +601,73 @@ const FlowchartWorkbench: React.FC = () => {
     setSubmissionError(null);
   };
 
+  const handleUndo = useCallback(() => {
+    useFlowchartWorkbenchStore.temporal.getState().undo();
+    setSelectedElement(null);
+  }, [setSelectedElement]);
+
+  const handleRedo = useCallback(() => {
+    useFlowchartWorkbenchStore.temporal.getState().redo();
+    setSelectedElement(null);
+  }, [setSelectedElement]);
+
+  const handleDeleteSelectedElement = useCallback(() => {
+    if (!selectedElement) {
+      return;
+    }
+    setDiagramData((current) => {
+      if (selectedElement.type === 'node') {
+        return {
+          ...current,
+          nodes: current.nodes.filter((node) => node.id !== selectedElement.id),
+          edges: current.edges.filter(
+            (edge) =>
+              edge.source !== selectedElement.id &&
+              edge.target !== selectedElement.id,
+          ),
+        };
+      }
+      return {
+        ...current,
+        edges: current.edges.filter((edge) => edge.id !== selectedElement.id),
+      };
+    });
+    setSelectedElement(null);
+  }, [selectedElement, setDiagramData, setSelectedElement]);
+
+  const handleDuplicateNode = useCallback(
+    (nodeId: string) => {
+      let duplicatedId: string | null = null;
+      setDiagramData((current) => {
+        const source = current.nodes.find((node) => node.id === nodeId);
+        if (!source || current.nodes.length >= 50) {
+          return current;
+        }
+        duplicatedId = createUniqueNodeId(current.nodes);
+        const duplicate: DiagramNode = {
+          ...source,
+          id: duplicatedId,
+          label: `${source.label} 副本`.slice(0, 120),
+          position: {
+            x: source.position.x + 40,
+            y: source.position.y + 40,
+          },
+          ...(source.style ? { style: { ...source.style } } : {}),
+        };
+        return { ...current, nodes: [...current.nodes, duplicate] };
+      });
+      if (duplicatedId) {
+        setSelectedElement({ type: 'node', id: duplicatedId });
+      }
+    },
+    [setDiagramData, setSelectedElement],
+  );
+
+  const handleResetDiagram = useCallback(() => {
+    resetDiagram();
+    setSelectedElement(null);
+  }, [resetDiagram, setSelectedElement]);
+
   const presentation = task ? TASK_PRESENTATIONS[task.status] : null;
   const currentTaskMessage = task
     ? task.status === 'failed'
@@ -589,25 +697,24 @@ const FlowchartWorkbench: React.FC = () => {
             }
             text={hasNoAvailableModel ? '暂无可用模型' : '模型服务'}
           />
+          {hasUnsavedChanges ? <Tag color="gold">未保存编辑</Tag> : null}
         </div>
       </header>
 
       <nav className={styles.modeBar} aria-label="工作台模式">
         <Segmented
-          value="generate"
+          value={activeMode}
           options={[
             { label: '生成', value: 'generate', icon: <PlayCircleOutlined /> },
             {
               label: '编辑',
               value: 'edit',
               icon: <EditOutlined />,
-              disabled: true,
             },
             {
               label: 'Mermaid',
               value: 'mermaid',
               icon: <FileTextOutlined />,
-              disabled: true,
             },
             {
               label: '导出',
@@ -616,6 +723,9 @@ const FlowchartWorkbench: React.FC = () => {
               disabled: true,
             },
           ]}
+          onChange={(value) =>
+            setActiveMode(value as 'generate' | 'edit' | 'mermaid')
+          }
         />
       </nav>
 
@@ -747,13 +857,41 @@ const FlowchartWorkbench: React.FC = () => {
 
         <section className={styles.previewPanel} aria-label="流程图预览">
           <div className={styles.previewHeader}>
-            <Typography.Text strong>流程图预览</Typography.Text>
+            <Typography.Text strong>
+              {activeMode === 'edit'
+                ? '流程图编辑器'
+                : activeMode === 'mermaid'
+                ? 'Mermaid 只读预览'
+                : '流程图预览'}
+            </Typography.Text>
             {presentation ? (
               <Badge status={presentation.badge} text={presentation.label} />
             ) : null}
           </div>
-          <div className={styles.previewContent}>
-            {isCreating ? (
+          <div
+            className={`${styles.previewContent} ${
+              activeMode === 'edit' ? styles.canvasContent : ''
+            } ${activeMode === 'mermaid' ? styles.mermaidContent : ''}`}
+          >
+            {activeMode === 'edit' ? (
+              <DiagramCanvas
+                diagramData={diagramData}
+                selectedElement={selectedElement}
+                onChange={setDiagramData}
+                onSelectElement={setSelectedElement}
+                onReset={handleResetDiagram}
+                onUndo={handleUndo}
+                onRedo={handleRedo}
+                canUndo={canUndo}
+                canRedo={canRedo}
+              />
+            ) : activeMode === 'mermaid' ? (
+              <MermaidPanel
+                source={mermaidSource}
+                status={mermaidStatus}
+                error={mermaidError}
+              />
+            ) : isCreating ? (
               <div className={styles.processingState}>
                 <Spin indicator={<LoadingOutlined spin />} size="large" />
                 <Typography.Text type="secondary">正在创建任务</Typography.Text>
@@ -774,6 +912,12 @@ const FlowchartWorkbench: React.FC = () => {
                 <Typography.Text type="secondary">
                   生成结果已准备就绪
                 </Typography.Text>
+                <Button
+                  icon={<EditOutlined />}
+                  onClick={() => setActiveMode('edit')}
+                >
+                  打开编辑器
+                </Button>
               </div>
             ) : task.status === 'failed' ? (
               <div className={styles.failureState}>
@@ -806,41 +950,61 @@ const FlowchartWorkbench: React.FC = () => {
         </section>
 
         <aside className={styles.detailPanel} aria-label="任务信息">
-          <div className={styles.panelHeader}>
-            <Typography.Text strong>生成信息</Typography.Text>
-          </div>
-          <dl className={styles.detailList}>
-            <div>
-              <dt>任务状态</dt>
-              <dd>{presentation?.label || '等待生成'}</dd>
-            </div>
-            <div>
-              <dt>连接状态</dt>
-              <dd>{getConnectionLabel(connectionMode, Boolean(task))}</dd>
-            </div>
-            <div>
-              <dt>流程方向</dt>
-              <dd>{direction === 'TB' ? '自上而下' : '从左到右'}</dd>
-            </div>
-            <div>
-              <dt>生成粒度</dt>
-              <dd>
-                {detailLevel === 'concise'
-                  ? '简洁'
-                  : detailLevel === 'detailed'
-                  ? '详细'
-                  : '标准'}
-              </dd>
-            </div>
-            <div>
-              <dt>模型选择</dt>
-              <dd>
-                {selectedModel === AUTO_ROUTE_MODEL
-                  ? '自动路由'
-                  : selectedModel}
-              </dd>
-            </div>
-          </dl>
+          {activeMode === 'edit' ? (
+            <>
+              <NodePropertyPanel
+                diagramData={diagramData}
+                selectedElement={selectedElement}
+                onChange={setDiagramData}
+                onSelectElement={setSelectedElement}
+                onDeleteSelected={handleDeleteSelectedElement}
+                onDuplicateNode={handleDuplicateNode}
+              />
+              <MermaidPanel
+                source={mermaidSource}
+                status={mermaidStatus}
+                error={mermaidError}
+              />
+            </>
+          ) : (
+            <>
+              <div className={styles.panelHeader}>
+                <Typography.Text strong>生成信息</Typography.Text>
+              </div>
+              <dl className={styles.detailList}>
+                <div>
+                  <dt>任务状态</dt>
+                  <dd>{presentation?.label || '等待生成'}</dd>
+                </div>
+                <div>
+                  <dt>连接状态</dt>
+                  <dd>{getConnectionLabel(connectionMode, Boolean(task))}</dd>
+                </div>
+                <div>
+                  <dt>流程方向</dt>
+                  <dd>{direction === 'TB' ? '自上而下' : '从左到右'}</dd>
+                </div>
+                <div>
+                  <dt>生成粒度</dt>
+                  <dd>
+                    {detailLevel === 'concise'
+                      ? '简洁'
+                      : detailLevel === 'detailed'
+                      ? '详细'
+                      : '标准'}
+                  </dd>
+                </div>
+                <div>
+                  <dt>模型选择</dt>
+                  <dd>
+                    {selectedModel === AUTO_ROUTE_MODEL
+                      ? '自动路由'
+                      : selectedModel}
+                  </dd>
+                </div>
+              </dl>
+            </>
+          )}
         </aside>
       </section>
 
