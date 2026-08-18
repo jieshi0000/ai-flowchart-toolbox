@@ -1,0 +1,338 @@
+.diagramCanvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 360px;
+  overflow: hidden;
+  background: #f7fbfa;
+}
+
+.reactFlow {
+  width: 100%;
+  height: 100%;
+}
+
+.reactFlow :global(.react-flow__background) {
+  background: #f7fbfa;
+}
+
+.reactFlow :global(.react-flow__controls) {
+  overflow: hidden;
+  border: 1px solid #cbdad8;
+  border-radius: 5px;
+  box-shadow: 0 3px 12px rgba(25, 55, 53, 0.1);
+}
+
+.reactFlow :global(.react-flow__controls-button) {
+  width: 30px;
+  height: 30px;
+  border-bottom-color: #d9e6e4;
+  background: #ffffff;
+  color: #315d59;
+}
+
+.reactFlow :global(.react-flow__minimap) {
+  overflow: hidden;
+  border: 1px solid #cbdad8;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.canvasToolbar {
+  position: absolute;
+  z-index: 5;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  max-width: calc(100% - 24px);
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  overflow-x: auto;
+  border: 1px solid #d2e0de;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 3px 12px rgba(25, 55, 53, 0.08);
+}
+
+.canvasToolbar :global(.ant-btn) {
+  flex: 0 0 auto;
+}
+
+.canvasToolbarLabel {
+  flex: 0 0 auto;
+  padding: 0 3px;
+  color: #536966;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.emptyCanvas {
+  position: absolute;
+  z-index: 4;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: min(360px, calc(100% - 32px));
+  justify-items: center;
+  gap: 9px;
+  padding: 18px;
+  transform: translate(-50%, -50%);
+  border: 1px dashed #b8d0cc;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #526763;
+  text-align: center;
+}
+
+.emptyCanvasTitle {
+  color: #263d3a;
+  font-weight: 600;
+}
+
+.canvasHint {
+  position: absolute;
+  z-index: 4;
+  right: 14px;
+  bottom: 12px;
+  max-width: min(330px, calc(100% - 28px));
+  padding: 5px 8px;
+  border: 1px solid #d9e6e4;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #6a7d79;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.nodeFrame {
+  position: relative;
+  display: grid;
+  width: 180px;
+  min-height: 68px;
+  place-items: center;
+}
+
+.nodeShell {
+  display: grid;
+  width: 168px;
+  min-height: 58px;
+  align-content: center;
+  justify-items: center;
+  gap: 2px;
+  padding: 9px 12px;
+  border: 2px solid var(--node-stroke);
+  background: var(--node-fill);
+  color: #213a37;
+  text-align: center;
+  transition: box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.nodeSelected .nodeShell {
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.2);
+}
+
+.start,
+.end {
+  border-radius: 999px;
+}
+
+.process {
+  border-radius: 5px;
+}
+
+.decision {
+  width: 124px;
+  min-height: 124px;
+  padding: 18px;
+  transform: rotate(45deg) scale(0.7);
+}
+
+.decision .nodeLabel,
+.decision .nodeTypeLabel {
+  transform: rotate(-45deg);
+}
+
+.input_output {
+  transform: skewX(-18deg);
+}
+
+.input_output .nodeLabel,
+.input_output .nodeTypeLabel {
+  transform: skewX(18deg);
+}
+
+.subprocess {
+  position: relative;
+  border-radius: 5px;
+}
+
+.subprocess::after {
+  position: absolute;
+  inset: 4px;
+  border: 1px solid var(--node-stroke);
+  border-radius: 3px;
+  content: '';
+  pointer-events: none;
+}
+
+.nodeTypeLabel {
+  color: #6c817d;
+  font-size: 10px;
+  line-height: 1.1;
+}
+
+.nodeLabel {
+  max-width: 142px;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.handle {
+  width: 9px;
+  height: 9px;
+  border: 2px solid #ffffff;
+  background: #3d8d84;
+}
+
+.edgeEditor {
+  display: grid;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.edgeEditorLabel {
+  color: #61736f;
+  font-size: 12px;
+}
+
+.propertyPanel {
+  display: grid;
+  gap: 16px;
+}
+
+.propertySection {
+  display: grid;
+  gap: 8px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e5edeb;
+}
+
+.propertySectionHeader {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.propertySectionHeader > :global(.ant-typography) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.propertyLabel {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  color: #61736f;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.positionGrid,
+.colorGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.colorInput {
+  width: 100%;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid #cbdad8;
+  border-radius: 4px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.propertyActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.propertyEmpty {
+  display: grid;
+  min-height: 160px;
+  place-items: center;
+}
+
+.clearSelectionButton {
+  justify-self: start;
+  padding-inline: 0;
+}
+
+.edgeEndpoints {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+  border: 1px solid #dce8e6;
+  border-radius: 4px;
+  background: #f7fbfa;
+  color: #315d59;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+}
+
+.mermaidPanel {
+  display: grid;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.mermaidSource :global(textarea) {
+  min-height: 180px;
+  resize: vertical;
+  color: #2f4642;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.mermaidState {
+  display: flex;
+  min-height: 120px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.mermaidHint {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@media (max-width: 760px) {
+  .diagramCanvas {
+    min-height: 330px;
+  }
+
+  .canvasToolbar {
+    top: 8px;
+    left: 8px;
+    max-width: calc(100% - 16px);
+  }
+
+  .canvasHint {
+    right: 8px;
+    bottom: 8px;
+  }
+}
