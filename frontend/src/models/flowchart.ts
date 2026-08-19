@@ -117,6 +117,7 @@ export interface FlowchartWorkbenchState {
   providerNoticeDismissed: boolean;
   diagramData: DiagramData;
   savedDiagramData: DiagramData;
+  documentVersion: number | null;
   mermaidSource: string | null;
   mermaidStatus: MermaidPreviewStatus;
   mermaidError: string | null;
@@ -135,6 +136,7 @@ export interface FlowchartWorkbenchState {
   setDiagramData: (
     diagramData: DiagramData | ((current: DiagramData) => DiagramData),
   ) => void;
+  setDocumentVersion: (documentVersion: number | null) => void;
   markDiagramSaved: () => void;
   resetDiagram: () => void;
   setMermaidPreview: (payload: {
@@ -165,6 +167,7 @@ export const useFlowchartWorkbenchStore = create<FlowchartWorkbenchState>()(
       providerNoticeDismissed: false,
       diagramData: createEmptyDiagramData(),
       savedDiagramData: createEmptyDiagramData(),
+      documentVersion: null,
       mermaidSource: null,
       mermaidStatus: 'idle',
       mermaidError: null,
@@ -190,15 +193,19 @@ export const useFlowchartWorkbenchStore = create<FlowchartWorkbenchState>()(
               : nextDiagramData,
           ),
         })),
+      setDocumentVersion: (documentVersion) => set({ documentVersion }),
       markDiagramSaved: () =>
         set((state) => ({
           savedDiagramData: cloneDiagramData(state.diagramData),
         })),
       resetDiagram: () =>
-        set((state) => ({
-          diagramData: createEmptyDiagramData(state.diagramData.direction),
-          selectedElement: null,
-        })),
+        set((state) => {
+          const diagramData = createEmptyDiagramData(
+            state.diagramData.direction,
+          );
+          diagramData.id = state.diagramData.id ?? null;
+          return { diagramData, selectedElement: null };
+        }),
       setMermaidPreview: ({ source, status, error = null }) =>
         set({
           mermaidSource: source,

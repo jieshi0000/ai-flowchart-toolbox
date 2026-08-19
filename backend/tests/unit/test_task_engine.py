@@ -172,7 +172,13 @@ async def test_execute_sync_provider_reaches_success_and_compiles_mermaid():
     assert task.result["mermaidSource"].startswith("flowchart TB")
     assert task.result["metadata"]["sourceTaskId"] == str(task.id)
     schedule_poll.assert_not_called()
-    assert [call.operation for call in session.added] == ["submit"]
+    assert [
+        call.operation for call in session.added if hasattr(call, "operation")
+    ] == ["submit"]
+    document = next(call for call in session.added if not hasattr(call, "operation"))
+    assert str(task.document_id) == str(document.id)
+    assert document.version == 1
+    assert document.mermaid_source.startswith("flowchart TB")
 
 
 @pytest.mark.asyncio

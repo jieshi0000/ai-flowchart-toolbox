@@ -32,6 +32,8 @@ async function copyText(value: string): Promise<boolean> {
 }
 
 export function MermaidPanel({ source, status, error }: MermaidPanelProps) {
+  const hasSource = Boolean(source);
+
   const handleCopy = async () => {
     if (!source) {
       return;
@@ -47,7 +49,7 @@ export function MermaidPanel({ source, status, error }: MermaidPanelProps) {
     <section className={styles.mermaidPanel} aria-label="Mermaid 只读预览">
       <div className={styles.propertySectionHeader}>
         <Typography.Text strong>Mermaid 源码</Typography.Text>
-        {status === 'ready' && source ? (
+        {hasSource ? (
           <Button
             size="small"
             icon={<CopyOutlined />}
@@ -61,7 +63,7 @@ export function MermaidPanel({ source, status, error }: MermaidPanelProps) {
         <div className={styles.mermaidState}>
           <Spin size="small" />
           <Typography.Text type="secondary">
-            后端正在编译 Mermaid
+            后端正在编译 Mermaid{hasSource ? '，当前保留上一次成功的源码' : ''}
           </Typography.Text>
         </div>
       ) : status === 'failed' ? (
@@ -71,15 +73,16 @@ export function MermaidPanel({ source, status, error }: MermaidPanelProps) {
           message="Mermaid 编译失败"
           description={error || '请稍后重试，流程图数据仍可继续编辑。'}
         />
-      ) : status === 'ready' && source ? (
+      ) : null}
+      {hasSource ? (
         <Input.TextArea
           className={styles.mermaidSource}
-          value={source}
+          value={source || ''}
           readOnly
           autoSize={{ minRows: 10, maxRows: 22 }}
           aria-label="Mermaid 源码，只读"
         />
-      ) : (
+      ) : status === 'idle' || status === 'ready' ? (
         <Empty
           image={<FileTextOutlined />}
           imageStyle={{ height: 34, color: '#72908a' }}
@@ -89,7 +92,7 @@ export function MermaidPanel({ source, status, error }: MermaidPanelProps) {
             </Typography.Text>
           }
         />
-      )}
+      ) : null}
       <Typography.Text className={styles.mermaidHint} type="secondary">
         预览只展示后端最近一次成功编译结果，不会反向修改画布。
       </Typography.Text>

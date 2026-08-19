@@ -31,6 +31,7 @@ from app.providers.provider_registry import (
 )
 from app.providers.transport import ProviderTransportError
 from app.schemas.task import TERMINAL_TASK_STATUSES, TaskStatus
+from app.services.document_service import create_generated_document
 from app.services.diagram_service import compile_diagram_document
 from app.services.event_service import (
     TaskEventPublisher,
@@ -735,6 +736,9 @@ class TaskEngine:
                 cancel_after_commit = bool(task.provider_request_id)
             else:
                 payload = _attach_task_metadata(payload, task)
+                document = create_generated_document(task, payload, now=self._now())
+                session.add(document)
+                task.document_id = _to_uuid(document.id)
                 _set_stage(task, TaskStatus.SUCCESS)
                 task.result = payload
                 task.next_poll_at = None

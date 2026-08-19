@@ -12,6 +12,7 @@ from uuid import UUID
 from celery.signals import worker_shutdown
 from loguru import logger
 
+from app.services.document_service import compile_document_mermaid
 from app.services.task_engine import TaskEngine
 from app.workers.celery_app import celery_app
 
@@ -39,6 +40,11 @@ def compensate_flowchart_tasks() -> None:
     _run(TaskEngine().compensate())
 
 
+@celery_app.task(name="flowchart.documents.compile_mermaid", ignore_result=True)
+def compile_flowchart_document_mermaid(document_id: str, version: int) -> None:
+    _run(compile_document_mermaid(_parse_task_id(document_id), int(version)))
+
+
 def enqueue_task_execution(task_id: UUID, *, countdown: int = 0) -> None:
     _enqueue(execute_flowchart_task, task_id, countdown)
 
@@ -49,6 +55,13 @@ def enqueue_task_poll(task_id: UUID, *, countdown: int = 0) -> None:
 
 def enqueue_task_cancel(task_id: UUID, *, countdown: int = 0) -> None:
     _enqueue(cancel_flowchart_task, task_id, countdown)
+
+
+def enqueue_document_mermaid_compilation(document_id: UUID, version: int) -> None:
+    try:
+        compile_flowchart_document_mermaid.apply_async(args=[str(document_id), int(version)])
+    except Exception:
+        logger.warning("flowchart Mermaid compile enqueue deferred documentId={}", document_id)
 
 
 def _enqueue(task, task_id: UUID, countdown: int) -> None:
@@ -91,7 +104,9 @@ def _parse_task_id(value: str) -> UUID:
 
 __all__ = [
     "cancel_flowchart_task",
+    "compile_flowchart_document_mermaid",
     "compensate_flowchart_tasks",
+    "enqueue_document_mermaid_compilation",
     "enqueue_task_cancel",
     "enqueue_task_execution",
     "enqueue_task_poll",

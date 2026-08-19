@@ -71,6 +71,7 @@ class MinioConfig(BaseModel):
     access_key: EncStr = "minioadmin"
     secret_key: EncStr = "minioadmin"
     secure: bool = False
+    bucket: str = "flowchart-exports"
 
 
 class CeleryConfig(BaseModel):
