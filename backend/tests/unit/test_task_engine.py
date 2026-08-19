@@ -426,6 +426,113 @@ async def test_compensate_requeues_waiting_task():
 
 
 @pytest.mark.asyncio
+async def test_compensate_expires_stale_unsubmitted_generation_task():
+    now = datetime(2026, 8, 17, 12, 0, 1)
+    task = _task()
+    task.created_at = now - timedelta(hours=1, microseconds=1)
+    session = _Session(task)
+    publisher = AsyncMock()
+    schedule_execute = Mock()
+    engine = TaskEngine(
+        session_factory=_session_factory(session),
+        event_publisher=publisher,
+        schedule_execute=schedule_execute,
+        now=lambda: now,
+    )
+
+    count = await engine.compensate()
+
+    assert count == 1
+    assert task.status == TaskStatus.EXPIRED.value
+    assert task.progress == 5
+    assert task.stage == "任务已过期"
+    assert task.error_code == "TASK_EXPIRED"
+    assert task.error_message == "任务已过期，请重新生成"
+    schedule_execute.assert_not_called()
+    assert publisher.await_args.args[0].status is TaskStatus.EXPIRED
+
+
+@pytest.mark.asyncio
+async def test_compensate_keeps_generation_task_at_one_hour_boundary_recoverable():
+    now = datetime(2026, 8, 17, 12, 0, 1)
+    task = _task()
+    task.created_at = now - timedelta(hours=1)
+    session = _Session(task)
+    schedule_execute = Mock()
+    engine = TaskEngine(
+        session_factory=_session_factory(session),
+        schedule_execute=schedule_execute,
+        now=lambda: now,
+    )
+
+    count = await engine.compensate()
+
+    assert count == 1
+    assert task.status == TaskStatus.WAITING.value
+    schedule_execute.assert_called_once_with(task.id, 0)
+
+
+@pytest.mark.asyncio
+async def test_compensate_expires_stale_submitting_task_and_cancels_known_provider_request():
+    now = datetime(2026, 8, 17, 12, 0, 1)
+    task = _task(status=TaskStatus.SUBMITTING.value, provider_request_id="request-zombie")
+    task.created_at = now - timedelta(hours=2)
+    session = _Session(task)
+    schedule_cancel = Mock()
+    engine = TaskEngine(
+        session_factory=_session_factory(session),
+        schedule_cancel=schedule_cancel,
+        now=lambda: now,
+    )
+
+    count = await engine.compensate()
+
+    assert count == 1
+    assert task.status == TaskStatus.EXPIRED.value
+    schedule_cancel.assert_called_once_with(task.id, 0)
+
+
+@pytest.mark.asyncio
+async def test_compensate_retries_cancel_for_expired_task_with_provider_request():
+    task = _task(
+        status=TaskStatus.EXPIRED.value,
+        provider_request_id="request-zombie",
+    )
+    session = _Session(task)
+    schedule_cancel = Mock()
+    engine = TaskEngine(
+        session_factory=_session_factory(session),
+        schedule_cancel=schedule_cancel,
+        now=lambda: datetime(2026, 8, 17, 12, 0, 1),
+    )
+
+    count = await engine.compensate()
+
+    assert count == 1
+    schedule_cancel.assert_called_once_with(task.id, 0)
+
+
+@pytest.mark.asyncio
+async def test_compensate_keeps_stale_export_task_for_export_worker_recovery():
+    now = datetime(2026, 8, 17, 12, 0, 1)
+    task = _task(task_type=TaskType.DIAGRAM_EXPORT.value)
+    task.created_at = now - timedelta(hours=2)
+    session = _Session(task)
+    schedule_export = Mock()
+    engine = TaskEngine(
+        session_factory=_session_factory(session),
+        schedule_export=schedule_export,
+        now=lambda: now,
+    )
+
+    count = await engine.compensate()
+
+    assert count == 1
+    assert task.status == TaskStatus.WAITING.value
+    schedule_export.assert_called_once_with(task.id)
+
+
+@pytest.mark.asyncio
 async def test_compensate_requeues_export_task_to_chromium_worker():
     task = _task(
         task_type=TaskType.DIAGRAM_EXPORT.value,
