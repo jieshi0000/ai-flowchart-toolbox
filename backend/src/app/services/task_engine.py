@@ -46,6 +46,9 @@ MIN_POLL_SECONDS = 3
 MAX_POLL_SECONDS = 15
 SUBMIT_WATCHDOG_SECONDS = 60
 COMPENSATION_LIMIT = 100
+# 任务在尚未获得供应商请求标识前最多等待一小时。超过该时间通常意味着
+# Worker/消息投递已中断，继续补调度会让用户看到无期限的“处理中”。
+ZOMBIE_SUBMISSION_TIMEOUT = timedelta(hours=1)
 
 TASK_STAGE_DETAILS: dict[TaskStatus, tuple[int, str]] = {
     TaskStatus.WAITING: (5, "任务已创建，等待处理"),
@@ -74,6 +77,7 @@ _SAFE_ERROR_MESSAGES = {
     "PROVIDER_TASK_TIMEOUT": _TIMEOUT_MESSAGE,
     "PROVIDER_UNHEALTHY": "供应商服务暂时不可用，请稍后重试",
     "TASK_CANCELED": "任务已取消",
+    "TASK_EXPIRED": "任务已过期，请重新生成",
 }
 
 
@@ -306,13 +310,14 @@ class TaskEngine:
             await self._complete_document(task_id, payload)
 
     async def compensate(self, *, limit: int = COMPENSATION_LIMIT) -> int:
-        """恢复遗漏消息、过期轮询和未完成的供应商取消请求。"""
+        """恢复遗漏消息、收敛僵尸任务，并处理未完成的供应商取消请求。"""
 
         now = self._now()
         execute_ids: list[UUID] = []
         poll_ids: list[UUID] = []
         cancel_ids: list[UUID] = []
         export_ids: list[UUID] = []
+        handled_ids: set[UUID] = set()
         changed_tasks: list[FlowchartTask] = []
         active_statuses = [
             TaskStatus.WAITING.value,
@@ -322,7 +327,11 @@ class TaskEngine:
             TaskStatus.VALIDATING.value,
             TaskStatus.RENDERING.value,
         ]
-        cancellation_statuses = [TaskStatus.CANCELED.value, TaskStatus.FAILED.value]
+        cancellation_statuses = [
+            TaskStatus.CANCELED.value,
+            TaskStatus.EXPIRED.value,
+            TaskStatus.FAILED.value,
+        ]
 
         async with self._session_factory() as session:
             result = await session.execute(
@@ -356,9 +365,18 @@ class TaskEngine:
                         export_ids.append(task_id)
                     continue
 
+                if _is_stale_unsubmitted_generation_task(task, status=status, now=now):
+                    self._mark_expired(task)
+                    changed_tasks.append(task)
+                    handled_ids.add(task_id)
+                    if task.provider_request_id:
+                        cancel_ids.append(task_id)
+                    continue
+
                 if status not in TERMINAL_TASK_STATUSES and _is_due(task.deadline_at, now):
                     self._mark_failed(task, code=_TIMEOUT_CODE)
                     changed_tasks.append(task)
+                    handled_ids.add(task_id)
                     if task.provider_request_id:
                         cancel_ids.append(task_id)
                     continue
@@ -374,7 +392,7 @@ class TaskEngine:
                 elif status in {TaskStatus.VALIDATING, TaskStatus.RENDERING}:
                     execute_ids.append(task_id)
                 elif (
-                    status is TaskStatus.CANCELED
+                    status in {TaskStatus.CANCELED, TaskStatus.EXPIRED}
                     or (status is TaskStatus.FAILED and task.error_code == _TIMEOUT_CODE)
                 ) and task.provider_request_id:
                     cancel_ids.append(task_id)
@@ -390,7 +408,11 @@ class TaskEngine:
             self._schedule_cancel(task_id, 0)
         for task_id in export_ids:
             self._schedule_export(task_id)
-        return len(execute_ids) + len(poll_ids) + len(cancel_ids) + len(export_ids)
+        handled_ids.update(execute_ids)
+        handled_ids.update(poll_ids)
+        handled_ids.update(cancel_ids)
+        handled_ids.update(export_ids)
+        return len(handled_ids)
 
     async def _claim_submission(self, task_id: UUID) -> TaskSnapshot | None:
         timeout_snapshot: TaskSnapshot | None = None
@@ -806,7 +828,7 @@ class TaskEngine:
                 return None
             status = TaskStatus(task.status)
             is_timeout = status is TaskStatus.FAILED and task.error_code == _TIMEOUT_CODE
-            if status is not TaskStatus.CANCELED and not is_timeout:
+            if status not in {TaskStatus.CANCELED, TaskStatus.EXPIRED} and not is_timeout:
                 return None
             if task.provider_status == _PROVIDER_CANCELED:
                 return None
@@ -876,6 +898,16 @@ class TaskEngine:
         task.next_poll_at = None
         task.error_code = code
         task.error_message = _safe_message(code)
+
+    def _mark_expired(self, task: FlowchartTask) -> None:
+        """将未提交给供应商的过期生成任务收敛为可重试终态。"""
+
+        # _set_stage 使用现有进度与状态默认进度的较大值，避免终态事件让
+        # 已展示的任务进度倒退。
+        _set_stage(task, TaskStatus.EXPIRED)
+        task.next_poll_at = None
+        task.error_code = "TASK_EXPIRED"
+        task.error_message = _safe_message(task.error_code)
 
 
 async def _get_locked_task(session: AsyncSession, task_id: UUID) -> FlowchartTask | None:
@@ -1021,6 +1053,28 @@ def _is_due(value: datetime | None, now: datetime) -> bool:
     if value.tzinfo is not None:
         value = value.astimezone(UTC).replace(tzinfo=None)
     return value <= now
+
+
+def _is_stale_unsubmitted_generation_task(
+    task: FlowchartTask,
+    *,
+    status: TaskStatus,
+    now: datetime,
+) -> bool:
+    """只处理生成任务，避免影响独立 Chromium 导出任务的恢复策略。"""
+
+    if task.type != TaskType.DIAGRAM_GENERATE.value:
+        return False
+    if status not in {TaskStatus.WAITING, TaskStatus.SUBMITTING}:
+        return False
+    created_at = task.created_at
+    if created_at is None:
+        return False
+    if created_at.tzinfo is not None:
+        created_at = created_at.astimezone(UTC).replace(tzinfo=None)
+    if now.tzinfo is not None:
+        now = now.astimezone(UTC).replace(tzinfo=None)
+    return now - created_at > ZOMBIE_SUBMISSION_TIMEOUT
 
 
 def _remaining_seconds(deadline: datetime, now: datetime) -> float:
