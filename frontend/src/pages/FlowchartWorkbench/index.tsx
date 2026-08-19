@@ -509,9 +509,14 @@ const FlowchartWorkbench: React.FC = () => {
     if (!documentId) {
       return;
     }
-    void loadDocument(documentId).catch(() => {
-      // 本地残留的过期文档标识不应阻止工作台继续工作。
-    });
+    void loadDocument(documentId)
+      .then(() => {
+        // 刷新后直接展示已恢复的文档，避免它仅在“编辑”标签中隐式存在。
+        setActiveMode('edit');
+      })
+      .catch(() => {
+        // 本地残留的过期文档标识不应阻止工作台继续工作。
+      });
   }, [loadDocument]);
 
   useEffect(() => {
