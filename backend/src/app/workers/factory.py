@@ -18,7 +18,11 @@ def create_celery_app(settings: Settings) -> Celery:
             "flowchart-compensate-tasks": {
                 "task": "flowchart.tasks.compensate",
                 "schedule": 60.0,
-            }
+            },
+            "flowchart-cleanup-export-files": {
+                "task": "flowchart.files.cleanup",
+                "schedule": 300.0,
+            },
         },
         broker_connection_retry_on_startup=True,
         enable_utc=False,

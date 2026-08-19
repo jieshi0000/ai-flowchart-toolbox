@@ -94,6 +94,7 @@ async def export_flowchart_document(
             current_flowchart_user_id(request),
             document_id,
             payload,
+            schedule_render=_enqueue_document_export,
         )
     )
 
@@ -106,6 +107,16 @@ def _enqueue_document_mermaid_compilation(document_id: UUID, version: int) -> No
         enqueue_document_mermaid_compilation,
         document_id,
         version,
+    )
+
+
+def _enqueue_document_export(task_id: UUID) -> None:
+    from app.workers.tasks import enqueue_document_export
+
+    asyncio.get_running_loop().run_in_executor(
+        None,
+        enqueue_document_export,
+        task_id,
     )
 
 

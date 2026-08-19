@@ -30,7 +30,7 @@ from app.providers.provider_registry import (
     get_provider_registry,
 )
 from app.providers.transport import ProviderTransportError
-from app.schemas.task import TERMINAL_TASK_STATUSES, TaskStatus
+from app.schemas.task import TERMINAL_TASK_STATUSES, TaskStatus, TaskType
 from app.services.document_service import create_generated_document
 from app.services.diagram_service import compile_diagram_document
 from app.services.event_service import (
@@ -38,6 +38,7 @@ from app.services.event_service import (
     publish_task_event,
     task_status_event_from_task,
 )
+from app.services.export_service import is_export_render_claimable
 
 
 POLL_BACKOFF_SECONDS = (3, 6, 12, 15, 15)
@@ -111,6 +112,7 @@ class TaskEngine:
         schedule_execute: Callable[[UUID, int], None] | None = None,
         schedule_poll: Callable[[UUID, int], None] | None = None,
         schedule_cancel: Callable[[UUID, int], None] | None = None,
+        schedule_export: Callable[[UUID], None] | None = None,
         now: Callable[[], datetime] | None = None,
         event_publisher: TaskEventPublisher | None = None,
     ) -> None:
@@ -119,6 +121,7 @@ class TaskEngine:
         self._schedule_execute = schedule_execute or _default_schedule_execute
         self._schedule_poll = schedule_poll or _default_schedule_poll
         self._schedule_cancel = schedule_cancel or _default_schedule_cancel
+        self._schedule_export = schedule_export or _default_schedule_export
         self._now = now or _utcnow
         self._event_publisher = event_publisher or publish_task_event
 
@@ -281,6 +284,8 @@ class TaskEngine:
             task = await _get_locked_task(session, task_id)
             if task is None:
                 return
+            if task.type != TaskType.DIAGRAM_GENERATE.value:
+                return
             status = TaskStatus(task.status)
             if status not in {TaskStatus.VALIDATING, TaskStatus.RENDERING}:
                 return
@@ -307,6 +312,7 @@ class TaskEngine:
         execute_ids: list[UUID] = []
         poll_ids: list[UUID] = []
         cancel_ids: list[UUID] = []
+        export_ids: list[UUID] = []
         changed_tasks: list[FlowchartTask] = []
         active_statuses = [
             TaskStatus.WAITING.value,
@@ -342,6 +348,14 @@ class TaskEngine:
             for task in tasks:
                 status = TaskStatus(task.status)
                 task_id = _to_uuid(task.id)
+
+                # SVG/PNG 导出任务由 Chromium Worker 执行；不要把它们送入
+                # 供应商生成状态机，也不要按供应商超时规则标记失败。
+                if task.type == TaskType.DIAGRAM_EXPORT.value:
+                    if is_export_render_claimable(task, now=now):
+                        export_ids.append(task_id)
+                    continue
+
                 if status not in TERMINAL_TASK_STATUSES and _is_due(task.deadline_at, now):
                     self._mark_failed(task, code=_TIMEOUT_CODE)
                     changed_tasks.append(task)
@@ -374,13 +388,17 @@ class TaskEngine:
             self._schedule_poll(task_id, 0)
         for task_id in cancel_ids:
             self._schedule_cancel(task_id, 0)
-        return len(execute_ids) + len(poll_ids) + len(cancel_ids)
+        for task_id in export_ids:
+            self._schedule_export(task_id)
+        return len(execute_ids) + len(poll_ids) + len(cancel_ids) + len(export_ids)
 
     async def _claim_submission(self, task_id: UUID) -> TaskSnapshot | None:
         timeout_snapshot: TaskSnapshot | None = None
         async with self._session_factory() as session:
             task = await _get_locked_task(session, task_id)
             if task is None:
+                return None
+            if task.type != TaskType.DIAGRAM_GENERATE.value:
                 return None
             status = TaskStatus(task.status)
             can_retry_submit = status is TaskStatus.SUBMITTING and _is_due(task.next_poll_at, self._now())
@@ -528,6 +546,8 @@ class TaskEngine:
         async with self._session_factory() as session:
             task = await _get_locked_task(session, task_id)
             if task is None:
+                return None, False
+            if task.type != TaskType.DIAGRAM_GENERATE.value:
                 return None, False
             status = TaskStatus(task.status)
             if status is TaskStatus.CANCELED:
@@ -1043,6 +1063,12 @@ def _default_schedule_cancel(task_id: UUID, countdown: int) -> None:
     from app.workers.tasks import enqueue_task_cancel
 
     enqueue_task_cancel(task_id, countdown=countdown)
+
+
+def _default_schedule_export(task_id: UUID) -> None:
+    from app.workers.tasks import enqueue_document_export
+
+    enqueue_document_export(task_id)
 
 
 __all__ = [

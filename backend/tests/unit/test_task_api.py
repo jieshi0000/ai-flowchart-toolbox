@@ -118,5 +118,5 @@ async def test_events_endpoint_sends_terminal_status_as_first_sse_frame(monkeypa
     assert chunks == [
         'event: task-status\ndata: {"taskId":"'
         + str(task_id)
-        + '","status":"success","progress":100,"stage":"流程图已生成"}\n\n'
+        + '","type":"diagram_generate","status":"success","progress":100,"stage":"流程图已生成"}\n\n'
     ]

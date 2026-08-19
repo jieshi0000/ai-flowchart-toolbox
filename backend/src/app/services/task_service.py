@@ -140,7 +140,11 @@ def _to_status_response(task: FlowchartTask) -> TaskStatusResponse:
         model_name=task.model_name,
         poll_count=task.poll_count,
         document_id=_to_uuid(task.document_id) if task.document_id is not None else None,
-        download_url=None,
+        download_url=(
+            f"/api/flowchart/files/download?fileId={task.output_file_id}"
+            if task.output_file_id is not None
+            else None
+        ),
         error_code=task.error_code,
         error_message=task.error_message,
     )
@@ -274,6 +278,7 @@ async def cancel_task(
     await _publish_event(
         TaskStatusEvent(
             task_id=_to_uuid(task.id),
+            type=task.type,
             status=TaskStatus.CANCELED,
             progress=0,
             stage=CANCELED_STAGE,

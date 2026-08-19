@@ -2,6 +2,14 @@ FROM python:3.12-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        chromium \
+        fontconfig \
+        fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple
 
 WORKDIR /app
@@ -9,11 +17,18 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN pip install uv && uv sync --frozen --no-dev
 
+COPY fonts/ ./fonts/
+RUN mkdir -p /usr/share/fonts/flowchart/Inter /usr/share/fonts/flowchart/SourceHanSansSC \
+    && cp fonts/Inter/*.ttf /usr/share/fonts/flowchart/Inter/ \
+    && cp fonts/SourceHanSansSC/*.otf /usr/share/fonts/flowchart/SourceHanSansSC/ \
+    && fc-cache -fv
+
 COPY src/ ./src/
 COPY db/ ./db/
 COPY migrate.py ./
 
 ENV PYTHONPATH=/app/src
+ENV FLOWCHART_CHROMIUM_PATH=/usr/bin/chromium
 EXPOSE 8000
 
 # 生产迁移（compose 已注入 backend/.env）：

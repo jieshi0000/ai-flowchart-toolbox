@@ -8,9 +8,12 @@ import {
   type DiagramNode,
 } from '@/models/flowchart';
 import {
+  createFlowchartDocumentExport,
+  downloadFlowchartFile,
   getFlowchartDocument,
   saveFlowchartDocument,
   type FlowchartDocument,
+  type FlowchartExportFormat,
 } from '@/services/flowchart/document';
 import {
   cancelFlowchartTask,
@@ -34,6 +37,7 @@ import {
   ApartmentOutlined,
   CheckCircleFilled,
   CloudServerOutlined,
+  DownloadOutlined,
   EditOutlined,
   ExportOutlined,
   FileTextOutlined,
@@ -132,6 +136,31 @@ const TASK_PRESENTATIONS: Record<FlowchartTaskStatus, TaskPresentation> = {
     description: '请重新创建生成任务',
   },
 };
+
+const EXPORT_TASK_PRESENTATIONS: Record<FlowchartTaskStatus, TaskPresentation> =
+  {
+    ...TASK_PRESENTATIONS,
+    waiting: {
+      badge: 'processing',
+      label: '导出已排队',
+      description: '正在等待导出 Worker',
+    },
+    rendering: {
+      badge: 'processing',
+      label: '正在渲染导出文件',
+      description: 'Chromium 正在准备文件',
+    },
+    success: {
+      badge: 'success',
+      label: '导出已完成',
+      description: '导出文件已准备就绪',
+    },
+    failed: {
+      badge: 'error',
+      label: '导出失败',
+      description: '请稍后重试导出',
+    },
+  };
 
 const CANCELLABLE_TASK_STATUSES = new Set<FlowchartTaskStatus>([
   'waiting',
@@ -387,8 +416,17 @@ const FlowchartWorkbench: React.FC = () => {
   const [documentActionError, setDocumentActionError] = useState<string | null>(
     null,
   );
-  const [activeMode, setActiveMode] = useState<'generate' | 'edit' | 'mermaid'>(
-    'generate',
+  const [activeMode, setActiveMode] = useState<
+    'generate' | 'edit' | 'mermaid' | 'export'
+  >('generate');
+  const [exportFormat, setExportFormat] =
+    useState<FlowchartExportFormat>('SVG');
+  const [exportBackground, setExportBackground] = useState<
+    'transparent' | 'white'
+  >('transparent');
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportActionError, setExportActionError] = useState<string | null>(
+    null,
   );
   const restoreStarted = useRef(false);
   const documentRestoreStarted = useRef(false);
@@ -678,6 +716,11 @@ const FlowchartWorkbench: React.FC = () => {
     if (!task || !['failed', 'canceled', 'expired'].includes(task.status)) {
       return;
     }
+    if (task.type === 'diagram_export') {
+      setActiveMode('export');
+      await handleCreateExport();
+      return;
+    }
     setSubmissionError(null);
     try {
       const result = await retryFlowchartTask(task.taskId);
@@ -744,6 +787,65 @@ const FlowchartWorkbench: React.FC = () => {
       setDocumentActionError(friendlyFailureFrom(error));
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handleCreateExport = async () => {
+    const documentId = diagramData.id;
+    if (!documentId || documentVersion === null) {
+      setExportActionError('请先完成流程图生成后再导出');
+      return;
+    }
+    if (hasUnsavedChanges) {
+      setExportActionError('请先保存当前编辑，再导出最新版本');
+      return;
+    }
+    setIsExporting(true);
+    setExportActionError(null);
+    try {
+      const result = await createFlowchartDocumentExport(
+        documentId,
+        exportFormat,
+        exportBackground,
+      );
+      if (result.code !== 200 || !result.data) {
+        setExportActionError(friendlyFailureFrom(result));
+        return;
+      }
+      setTask({
+        taskId: result.data.taskId,
+        type: 'diagram_export',
+        status: result.data.status,
+        progress: result.data.status === 'success' ? 100 : 5,
+        stage:
+          result.data.status === 'success' ? '导出文件已生成' : '等待导出渲染',
+        documentId,
+      });
+      setActiveTaskId(result.data.taskId);
+    } catch (error) {
+      setExportActionError(friendlyFailureFrom(error));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleDownloadExport = async () => {
+    const downloadUrl = task?.downloadUrl;
+    const fileId = downloadUrl?.match(/[?&]fileId=([^&]+)/)?.[1];
+    if (!fileId) {
+      setExportActionError('导出文件尚未准备好，请稍后刷新任务状态');
+      return;
+    }
+    try {
+      const result = await downloadFlowchartFile(fileId);
+      const objectUrl = URL.createObjectURL(result.blob);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = result.filename;
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 0);
+    } catch (error) {
+      setExportActionError(friendlyFailureFrom(error));
     }
   };
 
@@ -864,7 +966,11 @@ const FlowchartWorkbench: React.FC = () => {
     };
   }, [diagramData.id, documentVersion, mermaidStatus, setMermaidPreview]);
 
-  const presentation = task ? TASK_PRESENTATIONS[task.status] : null;
+  const presentation = task
+    ? (task.type === 'diagram_export'
+        ? EXPORT_TASK_PRESENTATIONS
+        : TASK_PRESENTATIONS)[task.status]
+    : null;
   const currentTaskMessage = task
     ? task.status === 'failed'
       ? friendlyTaskMessage(task.errorCode, task.errorMessage)
@@ -916,11 +1022,11 @@ const FlowchartWorkbench: React.FC = () => {
               label: '导出',
               value: 'export',
               icon: <ExportOutlined />,
-              disabled: true,
+              disabled: !diagramData.id || documentVersion === null,
             },
           ]}
           onChange={(value) =>
-            setActiveMode(value as 'generate' | 'edit' | 'mermaid')
+            setActiveMode(value as 'generate' | 'edit' | 'mermaid' | 'export')
           }
         />
       </nav>
@@ -1107,6 +1213,65 @@ const FlowchartWorkbench: React.FC = () => {
                 status={mermaidStatus}
                 error={mermaidError}
               />
+            ) : activeMode === 'export' ? (
+              <div className={styles.exportPanel}>
+                <Typography.Title level={4}>导出流程图</Typography.Title>
+                <Typography.Text type="secondary">
+                  导出使用当前已保存的文档版本，不影响画布编辑。
+                </Typography.Text>
+                <div className={styles.exportField}>
+                  <Typography.Text strong>文件格式</Typography.Text>
+                  <Segmented
+                    block
+                    value={exportFormat}
+                    options={[
+                      { label: 'SVG', value: 'SVG' },
+                      { label: 'PNG', value: 'PNG' },
+                      { label: 'Mermaid', value: 'MERMAID' },
+                      { label: 'JSON', value: 'JSON' },
+                    ]}
+                    onChange={(value) =>
+                      setExportFormat(value as FlowchartExportFormat)
+                    }
+                  />
+                </div>
+                {(exportFormat === 'SVG' || exportFormat === 'PNG') && (
+                  <div className={styles.exportField}>
+                    <Typography.Text strong>背景</Typography.Text>
+                    <Segmented
+                      block
+                      value={exportBackground}
+                      options={[
+                        { label: '透明', value: 'transparent' },
+                        { label: '白色', value: 'white' },
+                      ]}
+                      onChange={(value) =>
+                        setExportBackground(value as 'transparent' | 'white')
+                      }
+                    />
+                  </div>
+                )}
+                <Button
+                  type="primary"
+                  icon={<ExportOutlined />}
+                  loading={isExporting}
+                  onClick={() => void handleCreateExport()}
+                >
+                  创建导出
+                </Button>
+                {exportActionError ? (
+                  <Alert type="error" showIcon message={exportActionError} />
+                ) : null}
+                {task?.type === 'diagram_export' &&
+                task.status === 'success' ? (
+                  <Button
+                    icon={<DownloadOutlined />}
+                    onClick={() => void handleDownloadExport()}
+                  >
+                    下载文件
+                  </Button>
+                ) : null}
+              </div>
             ) : isCreating ? (
               <div className={styles.processingState}>
                 <Spin indicator={<LoadingOutlined spin />} size="large" />
@@ -1181,6 +1346,26 @@ const FlowchartWorkbench: React.FC = () => {
                 status={mermaidStatus}
                 error={mermaidError}
               />
+            </>
+          ) : activeMode === 'export' ? (
+            <>
+              <div className={styles.panelHeader}>
+                <Typography.Text strong>导出任务</Typography.Text>
+              </div>
+              <dl className={styles.detailList}>
+                <div>
+                  <dt>文件格式</dt>
+                  <dd>{exportFormat}</dd>
+                </div>
+                <div>
+                  <dt>任务状态</dt>
+                  <dd>{presentation?.label || '等待创建'}</dd>
+                </div>
+                <div>
+                  <dt>文档版本</dt>
+                  <dd>{documentVersion ?? '-'}</dd>
+                </div>
+              </dl>
             </>
           ) : (
             <>

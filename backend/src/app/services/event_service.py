@@ -33,12 +33,19 @@ def task_event_channel(task_id: UUID) -> str:
 
 
 def task_status_event_from_task(task: FlowchartTask) -> TaskStatusEvent:
+    download_url = (
+        f"/api/flowchart/files/download?fileId={task.output_file_id}"
+        if task.output_file_id is not None
+        else None
+    )
     return TaskStatusEvent(
         task_id=_to_uuid(task.id),
+        type=task.type,
         status=TaskStatus(task.status),
         progress=task.progress,
         stage=task.stage,
         document_id=_to_uuid(task.document_id) if task.document_id is not None else None,
+        download_url=download_url,
         error_code=task.error_code,
         error_message=task.error_message,
     )
@@ -47,10 +54,12 @@ def task_status_event_from_task(task: FlowchartTask) -> TaskStatusEvent:
 def task_status_event_from_response(response: TaskStatusResponse) -> TaskStatusEvent:
     return TaskStatusEvent(
         task_id=response.task_id,
+        type=response.type,
         status=response.status,
         progress=response.progress,
         stage=response.stage,
         document_id=response.document_id,
+        download_url=response.download_url,
         error_code=response.error_code,
         error_message=response.error_message,
     )

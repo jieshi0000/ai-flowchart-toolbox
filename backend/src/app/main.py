@@ -18,6 +18,7 @@ from app.api.provider_api import router as provider_router
 from app.api.task_api import router as task_router
 from app.api.template_api import router as template_router
 from app.api.document_api import router as document_router
+from app.api.file_api import router as file_router
 from app.middleware.auth import AuthMiddleware
 from app.providers.provider_registry import close_provider_registry
 
@@ -61,6 +62,7 @@ for router in (
     template_router,
     task_router,
     document_router,
+    file_router,
 ):
     for route in router.routes:
         if isinstance(route, APIRoute):
@@ -77,6 +79,7 @@ app.include_router(provider_router, prefix="/api")
 app.include_router(template_router, prefix="/api")
 app.include_router(task_router, prefix="/api")
 app.include_router(document_router, prefix="/api")
+app.include_router(file_router, prefix="/api")
 
 logger.info("Application startup", name=settings.app.name, debug=settings.app.debug)
 

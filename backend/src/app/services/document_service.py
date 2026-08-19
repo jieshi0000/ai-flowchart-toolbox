@@ -42,6 +42,7 @@ MERMAID_COMPILATION_EVENT = "document_mermaid_compilation"
 MERMAID_COMPILATION_ERROR_CODE = "MERMAID_RENDER_FAILED"
 MERMAID_COMPILATION_ERROR_MESSAGE = "Mermaid 编译失败，请稍后重试"
 EXPORT_READY_STAGE = "导出文件已生成"
+EXPORT_WAITING_STAGE = "等待导出渲染"
 
 _WINDOWS_RESERVED_NAMES = {
     "CON",
@@ -363,7 +364,8 @@ def create_generated_document(
 def sanitize_export_filename(title: str, extension: str) -> str:
     stem = title.replace("/", "").replace("\\", "")
     stem = _UNSAFE_FILENAME_CHARS.sub("_", stem).strip(" .")
-    if not stem or stem.upper() in _WINDOWS_RESERVED_NAMES:
+    reserved_base = stem.split(".", 1)[0].upper()
+    if not stem or reserved_base in _WINDOWS_RESERVED_NAMES:
         stem = "flowchart"
     return f"{stem[:100]}.{extension}"
 
@@ -375,9 +377,52 @@ async def create_document_export(
     request: ExportRequest,
     *,
     storage: ObjectStorage | None = None,
+    schedule_render: Callable[[UUID], None] | None = None,
 ) -> ExportTaskResponse:
     document = await _get_owned_document(session, user_id, document_id)
     export_format = request.format
+    if export_format in {ExportFormat.SVG, ExportFormat.PNG}:
+        # 渲染是独立的 Chromium Worker 工作，必须由 API/Worker 调度器提交。
+        # 直接调用服务且未提供调度器时拒绝，避免返回一个永远不会执行的任务。
+        if schedule_render is None:
+            raise BusinessException(
+                code=400,
+                message="当前导出 Worker 尚未配置",
+                error_code="EXPORT_FORMAT_UNSUPPORTED",
+            )
+        now = _utcnow()
+        snapshot = _document_payload(document)
+        task = FlowchartTask(
+            id=uuid_utils.uuid7(),
+            user_id=user_id,
+            type=TaskType.DIAGRAM_EXPORT.value,
+            status=TaskStatus.WAITING.value,
+            progress=5,
+            stage=EXPORT_WAITING_STAGE,
+            request_snapshot={
+                "documentId": str(document.id),
+                "version": document.version,
+                "title": document.title,
+                "diagramData": snapshot,
+                "mermaidSource": document.mermaid_source,
+                "format": export_format.value,
+                "background": request.background.value,
+            },
+            result={
+                "documentId": str(document.id),
+                "version": document.version,
+                "format": export_format.value,
+                "costPoints": 0,
+            },
+            document_id=_to_uuid(document.id),
+            idempotency_key=str(uuid_utils.uuid7()),
+            expires_at=now + EXPORT_TASK_RETENTION,
+        )
+        session.add(task)
+        await session.commit()
+        _dispatch_export(schedule_render, _to_uuid(task.id))
+        return ExportTaskResponse(task_id=_to_uuid(task.id), status=TaskStatus.WAITING)
+
     if export_format not in {ExportFormat.MERMAID, ExportFormat.JSON}:
         raise BusinessException(
             code=400,
@@ -477,9 +522,20 @@ async def create_document_export(
     return ExportTaskResponse(task_id=_to_uuid(task.id), status=TaskStatus.SUCCESS)
 
 
+def _dispatch_export(scheduler: Callable[[UUID], None] | None, task_id: UUID) -> None:
+    if scheduler is None:
+        return
+    try:
+        scheduler(task_id)
+    except Exception:
+        logger.warning("flowchart export dispatch deferred taskId={}", task_id)
+
+
 __all__ = [
     "DOCUMENT_RETENTION",
     "EXPORT_RETENTION",
+    "EXPORT_TASK_RETENTION",
+    "EXPORT_WAITING_STAGE",
     "MERMAID_COMPILATION_EVENT",
     "DocumentVersionConflict",
     "compile_document_mermaid",

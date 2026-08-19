@@ -11,7 +11,7 @@ from app.providers.base import ModelProvider, ProviderPollResult, ProviderSubmis
 from app.providers.provider_registry import ProviderRegistry
 from app.providers.transport import ProviderHTTPError, ProviderResponseError
 from app.schemas.provider import ProviderConfig, ProviderHealth
-from app.schemas.task import TaskStatus
+from app.schemas.task import TaskStatus, TaskType
 from app.services.diagram_service import compile_diagram_document
 from app.services.task_engine import TaskEngine
 from tests.unit.provider_fixtures import provider_entry
@@ -115,12 +115,18 @@ def _diagram():
     }
 
 
-def _task(*, status="waiting", deadline=None, provider_request_id=None):
+def _task(
+    *,
+    status="waiting",
+    deadline=None,
+    provider_request_id=None,
+    task_type=TaskType.DIAGRAM_GENERATE.value,
+):
     now = datetime(2026, 8, 17, 12, 0, 0)
     return FlowchartTask(
         id=uuid4(),
         user_id="user-a",
-        type="diagram_generate",
+        type=task_type,
         status=status,
         progress=5,
         stage="任务已创建，等待处理",
@@ -417,3 +423,28 @@ async def test_compensate_requeues_waiting_task():
 
     assert count == 1
     schedule_execute.assert_called_once_with(task.id, 0)
+
+
+@pytest.mark.asyncio
+async def test_compensate_requeues_export_task_to_chromium_worker():
+    task = _task(
+        task_type=TaskType.DIAGRAM_EXPORT.value,
+        status=TaskStatus.RENDERING.value,
+        deadline=datetime(2026, 8, 17, 11, 59, 59),
+    )
+    session = _Session(task)
+    schedule_execute = Mock()
+    schedule_export = Mock()
+    engine = TaskEngine(
+        session_factory=_session_factory(session),
+        schedule_execute=schedule_execute,
+        schedule_export=schedule_export,
+        now=lambda: datetime(2026, 8, 17, 12, 0, 1),
+    )
+
+    count = await engine.compensate()
+
+    assert count == 1
+    assert task.status == TaskStatus.RENDERING.value
+    schedule_execute.assert_not_called()
+    schedule_export.assert_called_once_with(task.id)
