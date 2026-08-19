@@ -109,18 +109,28 @@ export async function downloadFlowchartFile(fileId: string) {
       },
     },
   );
-  if (!response.ok) {
-    throw new Error('导出文件下载失败');
-  }
-  const contentType = response.headers.get('content-type') || '';
-  if (contentType.includes('application/json')) {
-    const payload = (await response.json()) as {
-      message?: string;
-      errorCode?: string;
-    };
-    throw new Error(payload.message || '导出文件下载失败');
-  }
   const disposition = response.headers.get('content-disposition') || '';
+  const isAttachment = /^attachment(?:;|$)/i.test(disposition.trim());
+
+  // JSON 导出文件与统一业务错误响应都会使用 application/json。下载接口
+  // 为成功响应显式设置 attachment，因此必须以该头判断文件，而非 MIME。
+  if (!response.ok || !isAttachment) {
+    let errorMessage = '导出文件下载失败';
+    if (
+      (response.headers.get('content-type') || '').includes('application/json')
+    ) {
+      try {
+        const payload = (await response.json()) as {
+          message?: string;
+          errorCode?: string;
+        };
+        errorMessage = payload.message || errorMessage;
+      } catch {
+        // 非法错误响应仍使用通用下载提示。
+      }
+    }
+    throw new Error(errorMessage);
+  }
   const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
   const filename = encodedName
     ? decodeURIComponent(encodedName)
