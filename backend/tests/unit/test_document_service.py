@@ -288,3 +288,4 @@ def test_save_request_rejects_client_mermaid_source():
 def test_export_filename_removes_path_and_windows_reserved_names():
     assert document_service.sanitize_export_filename("../../审批流程", "mmd") == "审批流程.mmd"
     assert document_service.sanitize_export_filename("CON", "json") == "flowchart.json"
+    assert document_service.sanitize_export_filename("CON.txt", "svg") == "flowchart.svg"

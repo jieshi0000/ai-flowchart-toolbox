@@ -45,6 +45,7 @@ export function useTaskMonitor({
   const [task, setTask] = useState<FlowchartTask | null>(null);
   const [connectionMode, setConnectionMode] =
     useState<TaskConnectionMode>('idle');
+  const taskRef = useRef<FlowchartTask | null>(null);
   const onTaskChangeRef = useRef(onTaskChange);
 
   useEffect(() => {
@@ -54,6 +55,7 @@ export function useTaskMonitor({
   useEffect(() => {
     if (!enabled || !taskId) {
       setTask(null);
+      taskRef.current = null;
       setConnectionMode('idle');
       return undefined;
     }
@@ -69,11 +71,17 @@ export function useTaskMonitor({
       if (disposed) {
         return;
       }
-      setTask(nextTask);
-      if (nextTask.documentId) {
-        saveActiveDocumentId(nextTask.documentId);
+      const mergedTask = {
+        ...nextTask,
+        type: nextTask.type ?? taskRef.current?.type,
+        downloadUrl: nextTask.downloadUrl ?? taskRef.current?.downloadUrl,
+      };
+      taskRef.current = mergedTask;
+      setTask(mergedTask);
+      if (mergedTask.documentId) {
+        saveActiveDocumentId(mergedTask.documentId);
       }
-      if (isTerminalTaskStatus(nextTask.status)) {
+      if (isTerminalTaskStatus(mergedTask.status)) {
         terminal = true;
         setConnectionMode('idle');
         clearActiveTaskId();
@@ -83,7 +91,7 @@ export function useTaskMonitor({
         }
         sseAbortController.abort();
       }
-      onTaskChangeRef.current?.(nextTask);
+      onTaskChangeRef.current?.(mergedTask);
     };
 
     const refreshTask = async () => {
@@ -174,6 +182,7 @@ export function useTaskMonitor({
       startPolling();
     };
 
+    taskRef.current = null;
     setTask(null);
     setConnectionMode('connecting');
     void refreshTask();

@@ -53,6 +53,8 @@ export interface FlowchartDocumentExportResult {
   status: FlowchartTaskStatus;
 }
 
+export type FlowchartExportFormat = 'SVG' | 'PNG' | 'MERMAID' | 'JSON';
+
 export async function getFlowchartDocument(documentId: string) {
   return request<FlowchartResult<FlowchartDocument>>(
     '/api/flowchart/documents/get',
@@ -79,14 +81,49 @@ export async function saveFlowchartDocument(
 
 export async function createFlowchartDocumentExport(
   documentId: string,
-  format: 'MERMAID' | 'JSON',
+  format: FlowchartExportFormat,
+  background: 'transparent' | 'white' = 'transparent',
 ) {
   return request<FlowchartResult<FlowchartDocumentExportResult>>(
     '/api/flowchart/documents/export',
     {
       method: 'POST',
       params: { documentId },
-      data: { format, background: 'transparent' },
+      data: { format, background },
     },
   );
+}
+
+export async function downloadFlowchartFile(fileId: string) {
+  let token: string | null = null;
+  try {
+    token = window.localStorage.getItem('token');
+  } catch {
+    token = null;
+  }
+  const response = await fetch(
+    `/api/flowchart/files/download?fileId=${encodeURIComponent(fileId)}`,
+    {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    },
+  );
+  if (!response.ok) {
+    throw new Error('导出文件下载失败');
+  }
+  const contentType = response.headers.get('content-type') || '';
+  if (contentType.includes('application/json')) {
+    const payload = (await response.json()) as {
+      message?: string;
+      errorCode?: string;
+    };
+    throw new Error(payload.message || '导出文件下载失败');
+  }
+  const disposition = response.headers.get('content-disposition') || '';
+  const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const filename = encodedName
+    ? decodeURIComponent(encodedName)
+    : 'flowchart-export';
+  return { blob: await response.blob(), filename };
 }

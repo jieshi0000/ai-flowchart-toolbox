@@ -11,6 +11,8 @@ from app.schemas.document import (
     MermaidCompilation,
     MermaidCompilationState,
 )
+from app.schemas.export import ExportFormat, ExportRequest, ExportTaskResponse
+from app.schemas.task import TaskStatus
 from app.services.document_service import DocumentVersionConflict
 
 
@@ -73,3 +75,28 @@ async def test_save_endpoint_returns_latest_document_on_version_conflict(monkeyp
     assert result.data is not None
     assert result.data.latest_document is not None
     assert result.data.latest_document.id == document_id
+
+
+@pytest.mark.asyncio
+async def test_export_endpoint_passes_chromium_scheduler(monkeypatch):
+    document_id = uuid4()
+    captured = {}
+
+    async def fake_export(*args, **kwargs):
+        captured["args"] = args
+        captured["schedule_render"] = kwargs["schedule_render"]
+        return ExportTaskResponse(task_id=uuid4(), status=TaskStatus.WAITING)
+
+    monkeypatch.setattr(document_api, "create_document_export", fake_export)
+
+    result = await document_api.export_flowchart_document(
+        ExportRequest(format=ExportFormat.SVG),
+        _request(),
+        document_id,
+        SimpleNamespace(),
+    )
+
+    assert result.code == 200
+    assert captured["args"][1] == "user-a"
+    assert captured["args"][2] == document_id
+    assert captured["schedule_render"] is document_api._enqueue_document_export

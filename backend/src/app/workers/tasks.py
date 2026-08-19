@@ -13,6 +13,7 @@ from celery.signals import worker_shutdown
 from loguru import logger
 
 from app.services.document_service import compile_document_mermaid
+from app.services.export_service import cleanup_expired_export_files, render_document_export
 from app.services.task_engine import TaskEngine
 from app.workers.celery_app import celery_app
 
@@ -45,6 +46,16 @@ def compile_flowchart_document_mermaid(document_id: str, version: int) -> None:
     _run(compile_document_mermaid(_parse_task_id(document_id), int(version)))
 
 
+@celery_app.task(name="flowchart.documents.export", ignore_result=True)
+def export_flowchart_document(task_id: str) -> None:
+    _run(render_document_export(_parse_task_id(task_id)))
+
+
+@celery_app.task(name="flowchart.files.cleanup", ignore_result=True)
+def cleanup_flowchart_export_files() -> None:
+    _run(cleanup_expired_export_files())
+
+
 def enqueue_task_execution(task_id: UUID, *, countdown: int = 0) -> None:
     _enqueue(execute_flowchart_task, task_id, countdown)
 
@@ -62,6 +73,13 @@ def enqueue_document_mermaid_compilation(document_id: UUID, version: int) -> Non
         compile_flowchart_document_mermaid.apply_async(args=[str(document_id), int(version)])
     except Exception:
         logger.warning("flowchart Mermaid compile enqueue deferred documentId={}", document_id)
+
+
+def enqueue_document_export(task_id: UUID) -> None:
+    try:
+        export_flowchart_document.apply_async(args=[str(task_id)])
+    except Exception:
+        logger.warning("flowchart export enqueue deferred taskId={}", task_id)
 
 
 def _enqueue(task, task_id: UUID, countdown: int) -> None:
@@ -104,12 +122,15 @@ def _parse_task_id(value: str) -> UUID:
 
 __all__ = [
     "cancel_flowchart_task",
+    "cleanup_flowchart_export_files",
     "compile_flowchart_document_mermaid",
     "compensate_flowchart_tasks",
     "enqueue_document_mermaid_compilation",
+    "enqueue_document_export",
     "enqueue_task_cancel",
     "enqueue_task_execution",
     "enqueue_task_poll",
     "execute_flowchart_task",
+    "export_flowchart_document",
     "poll_flowchart_task",
 ]

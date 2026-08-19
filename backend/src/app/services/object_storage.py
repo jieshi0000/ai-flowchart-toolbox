@@ -22,7 +22,9 @@ class ObjectStorage(Protocol):
         content_type: str,
     ) -> None: ...
 
-    async def remove(self, object_name: str) -> None: ...
+    async def remove(self, object_name: str) -> bool: ...
+
+    async def get_bytes(self, object_name: str) -> bytes: ...
 
 
 class ObjectStorageError(RuntimeError):
@@ -64,12 +66,19 @@ class MinioObjectStorage:
         except (OSError, S3Error) as exc:
             raise ObjectStorageError("对象存储暂不可用") from exc
 
-    async def remove(self, object_name: str) -> None:
+    async def remove(self, object_name: str) -> bool:
         try:
             await asyncio.to_thread(self._client.remove_object, self._bucket, object_name)
+            return True
         except (OSError, S3Error):
-            # 上传成功后数据库提交失败时的补偿清理，不应覆盖原始异常。
-            return
+            # 调用方可据此决定是否保留数据库记录，供下次清理重试。
+            return False
+
+    async def get_bytes(self, object_name: str) -> bytes:
+        try:
+            return await asyncio.to_thread(self._get_bytes_sync, object_name)
+        except (OSError, S3Error) as exc:
+            raise ObjectStorageError("对象存储暂不可用") from exc
 
     def _put_bytes_sync(
         self,
@@ -94,6 +103,14 @@ class MinioObjectStorage:
         except S3Error as exc:
             if exc.code not in {"BucketAlreadyExists", "BucketAlreadyOwnedByYou"}:
                 raise
+
+    def _get_bytes_sync(self, object_name: str) -> bytes:
+        response = self._client.get_object(self._bucket, object_name)
+        try:
+            return response.read()
+        finally:
+            response.close()
+            response.release_conn()
 
 
 @lru_cache(maxsize=1)

@@ -2,7 +2,7 @@ import os
 from functools import lru_cache
 from typing import Annotated
 
-from pydantic import BaseModel, BeforeValidator
+from pydantic import BaseModel, BeforeValidator, Field
 from pydantic import ConfigDict
 from pydantic.alias_generators import to_camel
 from pydantic_settings import BaseSettings
@@ -74,6 +74,15 @@ class MinioConfig(BaseModel):
     bucket: str = "flowchart-exports"
 
 
+class ExportConfig(BaseModel):
+    """Chromium 导出 Worker 的受控运行参数。"""
+
+    chromium_path: str = ""
+    render_timeout_ms: int = Field(default=30_000, ge=1_000, le=120_000)
+    max_file_size: int = Field(default=10 * 1024 * 1024, ge=1_024)
+    temp_dir: str = ""
+
+
 class CeleryConfig(BaseModel):
     broker_url: EncStr = ""
     result_backend: EncStr = ""
@@ -104,6 +113,7 @@ class Settings(BaseSettings):
     auth: AuthConfig = AuthConfig()
     redis: RedisConfig = RedisConfig()
     minio: MinioConfig = MinioConfig()
+    export: ExportConfig = ExportConfig()
     celery: CeleryConfig = CeleryConfig()
     ai: AiConfig = AiConfig()
 
