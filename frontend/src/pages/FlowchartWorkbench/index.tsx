@@ -4,8 +4,14 @@ import {
   AUTO_ROUTE_MODEL,
   isDiagramDirty,
   useFlowchartWorkbenchStore,
+  type DiagramData,
   type DiagramNode,
 } from '@/models/flowchart';
+import {
+  getFlowchartDocument,
+  saveFlowchartDocument,
+  type FlowchartDocument,
+} from '@/services/flowchart/document';
 import {
   cancelFlowchartTask,
   createFlowchartTask,
@@ -17,6 +23,7 @@ import {
 import {
   getOrCreateFlowchartSessionId,
   restoreTaskContext,
+  saveActiveDocumentId,
 } from '@/services/flowchart/taskStorage';
 import {
   FlowchartProvider,
@@ -33,6 +40,7 @@ import {
   LoadingOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
+  SaveOutlined,
   SendOutlined,
   StopOutlined,
 } from '@ant-design/icons';
@@ -42,6 +50,7 @@ import {
   Button,
   Empty,
   Input,
+  message,
   Progress,
   Segmented,
   Select,
@@ -266,6 +275,16 @@ function getConnectionLabel(
   }
 }
 
+function diagramDataFromDocument(document: FlowchartDocument): DiagramData {
+  return {
+    id: document.id,
+    title: document.title,
+    direction: document.direction,
+    nodes: document.nodes,
+    edges: document.edges,
+  };
+}
+
 function providerStatusLabel(provider: FlowchartProvider): string {
   if (provider.status === 'healthy') {
     return '可用';
@@ -299,6 +318,9 @@ const FlowchartWorkbench: React.FC = () => {
     (state) => state.providerNoticeDismissed,
   );
   const diagramData = useFlowchartWorkbenchStore((state) => state.diagramData);
+  const documentVersion = useFlowchartWorkbenchStore(
+    (state) => state.documentVersion,
+  );
   const selectedElement = useFlowchartWorkbenchStore(
     (state) => state.selectedElement,
   );
@@ -347,15 +369,30 @@ const FlowchartWorkbench: React.FC = () => {
   const resetDiagram = useFlowchartWorkbenchStore(
     (state) => state.resetDiagram,
   );
+  const setDocumentVersion = useFlowchartWorkbenchStore(
+    (state) => state.setDocumentVersion,
+  );
+  const markDiagramSaved = useFlowchartWorkbenchStore(
+    (state) => state.markDiagramSaved,
+  );
+  const setMermaidPreview = useFlowchartWorkbenchStore(
+    (state) => state.setMermaidPreview,
+  );
   const setSelectedElement = useFlowchartWorkbenchStore(
     (state) => state.setSelectedElement,
   );
   const [isCreating, setIsCreating] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
+  const [documentActionError, setDocumentActionError] = useState<string | null>(
+    null,
+  );
   const [activeMode, setActiveMode] = useState<'generate' | 'edit' | 'mermaid'>(
     'generate',
   );
   const restoreStarted = useRef(false);
+  const documentRestoreStarted = useRef(false);
+  const loadedDocumentIdRef = useRef<string | null>(null);
   const canUndo = useStore(
     useFlowchartWorkbenchStore.temporal,
     (state) => state.pastStates.length > 0,
@@ -363,6 +400,44 @@ const FlowchartWorkbench: React.FC = () => {
   const canRedo = useStore(
     useFlowchartWorkbenchStore.temporal,
     (state) => state.futureStates.length > 0,
+  );
+
+  const applyDocument = useCallback(
+    (document: FlowchartDocument) => {
+      setDiagramData(diagramDataFromDocument(document));
+      markDiagramSaved();
+      setDirection(document.direction);
+      setDocumentVersion(document.metadata.version);
+      setMermaidPreview({
+        source: document.mermaidSource || null,
+        status: document.mermaidCompilation.status,
+        error: document.mermaidCompilation.errorMessage,
+      });
+      setSelectedElement(null);
+      saveActiveDocumentId(document.id);
+      useFlowchartWorkbenchStore.temporal.getState().clear();
+    },
+    [
+      markDiagramSaved,
+      setDiagramData,
+      setDirection,
+      setDocumentVersion,
+      setMermaidPreview,
+      setSelectedElement,
+    ],
+  );
+
+  const loadDocument = useCallback(
+    async (documentId: string) => {
+      const result = await getFlowchartDocument(documentId);
+      if (result.code !== 200 || !result.data) {
+        throw new Error(friendlyFailureFrom(result));
+      }
+      applyDocument(result.data);
+      loadedDocumentIdRef.current = documentId;
+      return result.data;
+    },
+    [applyDocument],
   );
 
   const onTaskChange = useCallback(
@@ -376,6 +451,30 @@ const FlowchartWorkbench: React.FC = () => {
     taskId: activeTaskId,
     onTaskChange,
   });
+
+  useEffect(() => {
+    const documentId = task?.documentId;
+    if (!documentId || loadedDocumentIdRef.current === documentId) {
+      return;
+    }
+    void loadDocument(documentId).catch((error) => {
+      setDocumentActionError(friendlyFailureFrom(error));
+    });
+  }, [loadDocument, task?.documentId]);
+
+  useEffect(() => {
+    if (documentRestoreStarted.current) {
+      return;
+    }
+    documentRestoreStarted.current = true;
+    const { documentId } = restoreTaskContext();
+    if (!documentId) {
+      return;
+    }
+    void loadDocument(documentId).catch(() => {
+      // 本地残留的过期文档标识不应阻止工作台继续工作。
+    });
+  }, [loadDocument]);
 
   useEffect(() => {
     let disposed = false;
@@ -519,6 +618,7 @@ const FlowchartWorkbench: React.FC = () => {
     }
     setIsCreating(true);
     setSubmissionError(null);
+    setDocumentActionError(null);
     try {
       const result = await createFlowchartTask({
         type: 'diagram_generate',
@@ -601,6 +701,52 @@ const FlowchartWorkbench: React.FC = () => {
     setSubmissionError(null);
   };
 
+  const handleSaveDocument = async () => {
+    const documentId = diagramData.id;
+    if (!documentId || documentVersion === null) {
+      message.warning('请先完成流程图生成后再保存编辑结果');
+      return;
+    }
+    if (!hasUnsavedChanges) {
+      message.info('当前没有需要保存的编辑');
+      return;
+    }
+
+    setIsSaving(true);
+    setDocumentActionError(null);
+    try {
+      const result = await saveFlowchartDocument(documentId, {
+        version: documentVersion,
+        title: diagramData.title,
+        direction: diagramData.direction,
+        nodes: diagramData.nodes,
+        edges: diagramData.edges,
+      });
+      if (result.code === 409 && result.data?.latestDocument) {
+        applyDocument(result.data.latestDocument);
+        message.warning('文档已被更新，已加载最新版本');
+        return;
+      }
+      if (result.code !== 200 || !result.data) {
+        setDocumentActionError(friendlyFailureFrom(result));
+        return;
+      }
+
+      markDiagramSaved();
+      setDocumentVersion(result.data.version);
+      setMermaidPreview({
+        source: result.data.mermaidSource || mermaidSource,
+        status: result.data.mermaidCompilation.status,
+        error: result.data.mermaidCompilation.errorMessage,
+      });
+      message.success('流程图已保存，正在编译 Mermaid');
+    } catch (error) {
+      setDocumentActionError(friendlyFailureFrom(error));
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleUndo = useCallback(() => {
     useFlowchartWorkbenchStore.temporal.getState().undo();
     setSelectedElement(null);
@@ -667,6 +813,56 @@ const FlowchartWorkbench: React.FC = () => {
     resetDiagram();
     setSelectedElement(null);
   }, [resetDiagram, setSelectedElement]);
+
+  useEffect(() => {
+    const documentId = diagramData.id;
+    if (
+      !documentId ||
+      documentVersion === null ||
+      mermaidStatus !== 'compiling'
+    ) {
+      return undefined;
+    }
+
+    let disposed = false;
+    let timer: number | undefined;
+    const refreshCompilation = async () => {
+      try {
+        const result = await getFlowchartDocument(documentId);
+        const document = result.code === 200 ? result.data : null;
+        if (
+          disposed ||
+          !document ||
+          document.metadata.version !== documentVersion
+        ) {
+          return;
+        }
+        setMermaidPreview({
+          source: document.mermaidSource || null,
+          status: document.mermaidCompilation.status,
+          error: document.mermaidCompilation.errorMessage,
+        });
+        if (document.mermaidCompilation.status === 'compiling') {
+          timer = window.setTimeout(() => {
+            void refreshCompilation();
+          }, 1_000);
+        }
+      } catch {
+        if (!disposed) {
+          timer = window.setTimeout(() => {
+            void refreshCompilation();
+          }, 1_000);
+        }
+      }
+    };
+    void refreshCompilation();
+    return () => {
+      disposed = true;
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [diagramData.id, documentVersion, mermaidStatus, setMermaidPreview]);
 
   const presentation = task ? TASK_PRESENTATIONS[task.status] : null;
   const currentTaskMessage = task
@@ -864,9 +1060,29 @@ const FlowchartWorkbench: React.FC = () => {
                 ? 'Mermaid 只读预览'
                 : '流程图预览'}
             </Typography.Text>
-            {presentation ? (
-              <Badge status={presentation.badge} text={presentation.label} />
-            ) : null}
+            <div className={styles.previewActions}>
+              {activeMode === 'edit' ? (
+                <Tooltip title="保存流程图">
+                  <Button
+                    size="small"
+                    type="primary"
+                    icon={<SaveOutlined />}
+                    loading={isSaving}
+                    disabled={
+                      !diagramData.id ||
+                      documentVersion === null ||
+                      !hasUnsavedChanges
+                    }
+                    onClick={() => void handleSaveDocument()}
+                  >
+                    保存
+                  </Button>
+                </Tooltip>
+              ) : null}
+              {presentation ? (
+                <Badge status={presentation.badge} text={presentation.label} />
+              ) : null}
+            </div>
           </div>
           <div
             className={`${styles.previewContent} ${
@@ -1033,6 +1249,7 @@ const FlowchartWorkbench: React.FC = () => {
           />
           <Typography.Text type="secondary">
             {submissionError ||
+              documentActionError ||
               currentTaskMessage ||
               getConnectionLabel(connectionMode, Boolean(task))}
           </Typography.Text>
