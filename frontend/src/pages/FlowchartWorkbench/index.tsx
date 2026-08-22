@@ -2,6 +2,7 @@ import { useLeaveConfirmation } from '@/hooks/useLeaveConfirmation';
 import { isTerminalTaskStatus, useTaskMonitor } from '@/hooks/useTaskMonitor';
 import {
   AUTO_ROUTE_MODEL,
+  createEmptyDiagramData,
   isDiagramDirty,
   useFlowchartWorkbenchStore,
   type DiagramData,
@@ -9,11 +10,14 @@ import {
 } from '@/models/flowchart';
 import {
   createFlowchartDocumentExport,
+  deleteFlowchartDocument,
   downloadFlowchartFile,
   getFlowchartDocument,
+  listFlowchartDocuments,
   saveFlowchartDocument,
   type FlowchartDocument,
   type FlowchartExportFormat,
+  type FlowchartDocumentHistoryItem,
 } from '@/services/flowchart/document';
 import {
   cancelFlowchartTask,
@@ -24,6 +28,8 @@ import {
   retryFlowchartTask,
 } from '@/services/flowchart/task';
 import {
+  clearActiveDocumentId,
+  clearActiveTaskId,
   getOrCreateFlowchartSessionId,
   restoreTaskContext,
   saveActiveDocumentId,
@@ -37,6 +43,7 @@ import {
   ApartmentOutlined,
   CheckCircleFilled,
   CloudServerOutlined,
+  DeleteOutlined,
   DownloadOutlined,
   EditOutlined,
   ExportOutlined,
@@ -55,6 +62,8 @@ import {
   Empty,
   Input,
   message,
+  Modal,
+  Popconfirm,
   Progress,
   Segmented,
   Select,
@@ -169,6 +178,8 @@ const CANCELLABLE_TASK_STATUSES = new Set<FlowchartTaskStatus>([
   'provider_queued',
   'provider_processing',
 ]);
+
+const HISTORY_PAGE_SIZE = 20;
 
 function createIdempotencyKey(): string {
   if (
@@ -432,6 +443,15 @@ const FlowchartWorkbench: React.FC = () => {
   const [exportActionError, setExportActionError] = useState<string | null>(
     null,
   );
+  const [historyRecords, setHistoryRecords] = useState<
+    FlowchartDocumentHistoryItem[]
+  >([]);
+  const [historyHasMore, setHistoryHasMore] = useState(false);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(
+    null,
+  );
   const restoreStarted = useRef(false);
   const documentRestoreStarted = useRef(false);
   const loadedDocumentIdRef = useRef<string | null>(null);
@@ -442,6 +462,33 @@ const FlowchartWorkbench: React.FC = () => {
   const canRedo = useStore(
     useFlowchartWorkbenchStore.temporal,
     (state) => state.futureStates.length > 0,
+  );
+
+  const loadHistory = useCallback(async (offset: number, append: boolean) => {
+    setHistoryLoading(true);
+    if (!append) {
+      setHistoryError(null);
+    }
+    try {
+      const result = await listFlowchartDocuments(offset, HISTORY_PAGE_SIZE);
+      if (result.code !== 200 || !result.data) {
+        throw new Error(friendlyFailureFrom(result));
+      }
+      const page = result.data;
+      setHistoryRecords((current) =>
+        append ? [...current, ...page.records] : page.records,
+      );
+      setHistoryHasMore(page.hasMore);
+    } catch (error) {
+      setHistoryError(friendlyFailureFrom(error));
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
+
+  const refreshHistory = useCallback(
+    () => loadHistory(0, false),
+    [loadHistory],
   );
 
   const applyDocument = useCallback(
@@ -458,6 +505,7 @@ const FlowchartWorkbench: React.FC = () => {
       setSelectedElement(null);
       saveActiveDocumentId(document.id);
       useFlowchartWorkbenchStore.temporal.getState().clear();
+      void refreshHistory();
     },
     [
       markDiagramSaved,
@@ -466,6 +514,7 @@ const FlowchartWorkbench: React.FC = () => {
       setDocumentVersion,
       setMermaidPreview,
       setSelectedElement,
+      refreshHistory,
     ],
   );
 
@@ -570,6 +619,10 @@ const FlowchartWorkbench: React.FC = () => {
       disposed = true;
     };
   }, [setTemplateLoadState, setTemplates]);
+
+  useEffect(() => {
+    void refreshHistory();
+  }, [refreshHistory]);
 
   useEffect(() => {
     if (restoreStarted.current || activeTaskId) {
@@ -749,6 +802,90 @@ const FlowchartWorkbench: React.FC = () => {
     setSubmissionError(null);
   };
 
+  const clearDeletedDocumentState = useCallback(() => {
+    const emptyDiagram = createEmptyDiagramData();
+    setDiagramData(emptyDiagram);
+    markDiagramSaved();
+    setDirection(emptyDiagram.direction);
+    setDocumentVersion(null);
+    setMermaidPreview({ source: null, status: 'idle' });
+    setSelectedElement(null);
+    setTask(null);
+    setActiveTaskId(null);
+    clearActiveDocumentId();
+    clearActiveTaskId();
+    loadedDocumentIdRef.current = null;
+    useFlowchartWorkbenchStore.temporal.getState().clear();
+    setActiveMode('generate');
+  }, [
+    markDiagramSaved,
+    setActiveTaskId,
+    setDiagramData,
+    setDirection,
+    setDocumentVersion,
+    setMermaidPreview,
+    setSelectedElement,
+    setTask,
+  ]);
+
+  const handleOpenHistoryDocument = useCallback(
+    (record: FlowchartDocumentHistoryItem) => {
+      const openDocument = () => {
+        setDocumentActionError(null);
+        void loadDocument(record.id)
+          .then(() => {
+            clearActiveTaskId();
+            setActiveTaskId(null);
+            setTask(null);
+            setActiveMode('edit');
+          })
+          .catch((error) => {
+            setDocumentActionError(friendlyFailureFrom(error));
+          });
+      };
+      if (hasUnsavedChanges) {
+        Modal.confirm({
+          title: '放弃未保存的修改？',
+          content: '打开历史流程图会放弃当前画布中的未保存修改。',
+          okText: '放弃并打开',
+          cancelText: '取消',
+          onOk: openDocument,
+        });
+        return;
+      }
+      openDocument();
+    },
+    [hasUnsavedChanges, loadDocument, setActiveTaskId, setTask],
+  );
+
+  const handleDeleteHistoryDocument = useCallback(
+    async (documentId: string) => {
+      setDeletingDocumentId(documentId);
+      setDocumentActionError(null);
+      try {
+        const result = await deleteFlowchartDocument(documentId);
+        if (result.code !== 200 || !result.data) {
+          throw new Error(friendlyFailureFrom(result));
+        }
+        setHistoryRecords((current) =>
+          current.filter((record) => record.id !== documentId),
+        );
+        if (diagramData.id === documentId) {
+          clearDeletedDocumentState();
+        }
+        message.success('流程图已永久删除');
+        await refreshHistory();
+      } catch (error) {
+        const errorMessage = friendlyFailureFrom(error);
+        setDocumentActionError(errorMessage);
+        message.error(errorMessage);
+      } finally {
+        setDeletingDocumentId(null);
+      }
+    },
+    [clearDeletedDocumentState, diagramData.id, refreshHistory],
+  );
+
   const handleSaveDocument = async () => {
     const documentId = diagramData.id;
     if (!documentId || documentVersion === null) {
@@ -788,6 +925,7 @@ const FlowchartWorkbench: React.FC = () => {
         error: result.data.mermaidCompilation.errorMessage,
       });
       message.success('流程图已保存，正在编译 Mermaid');
+      void refreshHistory();
     } catch (error) {
       setDocumentActionError(friendlyFailureFrom(error));
     } finally {
@@ -1124,6 +1262,79 @@ const FlowchartWorkbench: React.FC = () => {
           >
             生成流程图
           </Button>
+
+          <div className={styles.historySection}>
+            <div className={styles.panelHeader}>
+              <Typography.Text strong>最近流程图</Typography.Text>
+              {historyLoading ? <Spin size="small" /> : null}
+            </div>
+            {historyError ? (
+              <div className={styles.historyError}>
+                <Typography.Text type="secondary">
+                  最近流程图暂时无法加载
+                </Typography.Text>
+                <Button size="small" type="link" onClick={() => void refreshHistory()}>
+                  重试
+                </Button>
+              </div>
+            ) : null}
+            {historyRecords.length ? (
+              <div className={styles.historyList}>
+                {historyRecords.map((record) => (
+                  <div
+                    key={record.id}
+                    className={`${styles.historyItem} ${
+                      diagramData.id === record.id ? styles.historyItemActive : ''
+                    }`}
+                  >
+                    <button
+                      className={styles.historyOpenButton}
+                      type="button"
+                      onClick={() => handleOpenHistoryDocument(record)}
+                    >
+                      <strong>{record.title}</strong>
+                      <span>
+                        {record.direction === 'TB' ? '自上而下' : '从左到右'} · 最近编辑{' '}
+                        {record.updatedAt}
+                      </span>
+                    </button>
+                    <Popconfirm
+                      title="永久删除此流程图？"
+                      description="删除后不可恢复，关联导出文件也会删除。"
+                      okText="永久删除"
+                      cancelText="取消"
+                      okButtonProps={{ danger: true }}
+                      onConfirm={() => handleDeleteHistoryDocument(record.id)}
+                    >
+                      <Button
+                        aria-label={`删除 ${record.title}`}
+                        danger
+                        icon={<DeleteOutlined />}
+                        loading={deletingDocumentId === record.id}
+                        size="small"
+                        type="text"
+                      />
+                    </Popconfirm>
+                  </div>
+                ))}
+                {historyHasMore ? (
+                  <Button
+                    block
+                    loading={historyLoading}
+                    onClick={() => void loadHistory(historyRecords.length, true)}
+                  >
+                    加载更多
+                  </Button>
+                ) : null}
+              </div>
+            ) : historyLoading ? null : (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="暂无最近流程图"
+                styles={{ image: { height: 32 } }}
+              />
+            )}
+          </div>
 
           <div className={styles.templateSection}>
             <div className={styles.panelHeader}>
