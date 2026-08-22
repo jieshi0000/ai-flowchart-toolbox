@@ -13,7 +13,7 @@ from uuid import UUID
 
 import uuid_utils
 from loguru import logger
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_session_factory
@@ -21,16 +21,20 @@ from app.exceptions.business import BusinessException
 from app.models.document import FlowchartDocument
 from app.models.event import FlowchartEvent
 from app.models.file import FlowchartFile
+from app.models.provider_call import FlowchartProviderCall
 from app.models.task import FlowchartTask
 from app.schemas.diagram import DiagramDocument, DiagramSaveRequest
 from app.schemas.document import (
+    DocumentDeleteResponse,
     DocumentSaveResponse,
+    FlowchartDocumentHistoryItem,
+    FlowchartDocumentHistoryPage,
     FlowchartDocumentResponse,
     MermaidCompilation,
     MermaidCompilationState,
 )
 from app.schemas.export import ExportFormat, ExportRequest, ExportTaskResponse
-from app.schemas.task import TaskStatus, TaskType
+from app.schemas.task import TERMINAL_TASK_STATUSES, TaskStatus, TaskType
 from app.services.diagram_service import compile_mermaid
 from app.services.object_storage import ObjectStorage, ObjectStorageError, get_object_storage
 
@@ -167,6 +171,144 @@ async def get_document(
 ) -> FlowchartDocumentResponse:
     document = await _get_owned_document(session, user_id, document_id)
     return await to_document_response(session, document)
+
+
+async def list_documents(
+    session: AsyncSession,
+    user_id: str,
+    *,
+    offset: int = 0,
+    limit: int = 20,
+    now: datetime | None = None,
+) -> FlowchartDocumentHistoryPage:
+    """返回当前用户仍在保留期内的成功生成文档摘要。"""
+
+    result = await session.execute(
+        select(FlowchartDocument)
+        .where(
+            FlowchartDocument.user_id == user_id,
+            FlowchartDocument.source_task_id.is_not(None),
+            FlowchartDocument.expires_at > (now or _utcnow()),
+        )
+        .order_by(FlowchartDocument.updated_at.desc(), FlowchartDocument.id.desc())
+        .offset(offset)
+        .limit(limit + 1)
+    )
+    documents = result.scalars().all()
+    has_more = len(documents) > limit
+    return FlowchartDocumentHistoryPage(
+        records=[
+            FlowchartDocumentHistoryItem.model_validate(document)
+            for document in documents[:limit]
+        ],
+        offset=offset,
+        limit=limit,
+        has_more=has_more,
+    )
+
+
+async def delete_document(
+    session: AsyncSession,
+    user_id: str,
+    document_id: UUID,
+    *,
+    storage: ObjectStorage | None = None,
+) -> DocumentDeleteResponse:
+    """永久删除文档及其在本系统内的关联记录和导出对象。"""
+
+    document = await _get_owned_document(
+        session,
+        user_id,
+        document_id,
+        for_update=True,
+    )
+    normalized_document_id = _to_uuid(document.id)
+
+    task_conditions = [FlowchartTask.document_id == normalized_document_id]
+    if document.source_task_id is not None:
+        task_conditions.append(FlowchartTask.id == _to_uuid(document.source_task_id))
+    task_result = await session.execute(
+        select(FlowchartTask).where(
+            FlowchartTask.user_id == user_id,
+            or_(*task_conditions),
+        )
+    )
+    tasks = task_result.scalars().all()
+    terminal_statuses = {status.value for status in TERMINAL_TASK_STATUSES}
+    if any(
+        task.type == TaskType.DIAGRAM_EXPORT.value
+        and task.status not in terminal_statuses
+        for task in tasks
+    ):
+        await session.rollback()
+        raise BusinessException(
+            code=409,
+            message="存在未完成的导出任务，暂时不能删除流程图",
+            error_code="DOCUMENT_DELETE_BLOCKED",
+        )
+
+    task_ids = [_to_uuid(task.id) for task in tasks]
+    event_conditions = [FlowchartEvent.document_id == normalized_document_id]
+    file_conditions = [FlowchartFile.document_id == normalized_document_id]
+    if task_ids:
+        event_conditions.append(FlowchartEvent.task_id.in_(task_ids))
+        file_conditions.append(FlowchartFile.task_id.in_(task_ids))
+
+    event_result = await session.execute(
+        select(FlowchartEvent).where(or_(*event_conditions))
+    )
+    events = event_result.scalars().all()
+
+    provider_calls: list[FlowchartProviderCall] = []
+    if task_ids:
+        provider_call_result = await session.execute(
+            select(FlowchartProviderCall).where(
+                FlowchartProviderCall.task_id.in_(task_ids)
+            )
+        )
+        provider_calls = provider_call_result.scalars().all()
+
+    file_result = await session.execute(
+        select(FlowchartFile).where(
+            FlowchartFile.user_id == user_id,
+            or_(*file_conditions),
+        )
+    )
+    files = file_result.scalars().all()
+
+    current_storage = storage or get_object_storage()
+    try:
+        for file in files:
+            if file.stored_path and await current_storage.remove(file.stored_path) is False:
+                raise ObjectStorageError("导出对象删除失败")
+    except Exception:
+        await session.rollback()
+        raise BusinessException(
+            code=503,
+            message="流程图关联导出文件暂时无法删除，请稍后重试",
+            error_code="DOCUMENT_DELETE_STORAGE_FAILED",
+        ) from None
+
+    try:
+        for event in events:
+            await session.delete(event)
+        for provider_call in provider_calls:
+            await session.delete(provider_call)
+        for file in files:
+            await session.delete(file)
+        for task in tasks:
+            await session.delete(task)
+        await session.delete(document)
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        raise BusinessException(
+            code=503,
+            message="流程图暂时无法删除，请稍后重试",
+            error_code="DOCUMENT_DELETE_FAILED",
+        ) from None
+
+    return DocumentDeleteResponse(document_id=normalized_document_id)
 
 
 def _save_payload(document: FlowchartDocument, request: DiagramSaveRequest, version: int) -> dict[str, Any]:
@@ -379,7 +521,7 @@ async def create_document_export(
     storage: ObjectStorage | None = None,
     schedule_render: Callable[[UUID], None] | None = None,
 ) -> ExportTaskResponse:
-    document = await _get_owned_document(session, user_id, document_id)
+    document = await _get_owned_document(session, user_id, document_id, for_update=True)
     export_format = request.format
     if export_format in {ExportFormat.SVG, ExportFormat.PNG}:
         # 渲染是独立的 Chromium Worker 工作，必须由 API/Worker 调度器提交。
@@ -541,8 +683,10 @@ __all__ = [
     "compile_document_mermaid",
     "create_document_export",
     "create_generated_document",
+    "delete_document",
     "get_document",
     "get_mermaid_compilation",
+    "list_documents",
     "sanitize_export_filename",
     "save_document",
     "to_document_response",

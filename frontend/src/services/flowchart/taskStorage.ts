@@ -64,6 +64,10 @@ export function saveActiveDocumentId(documentId: string): void {
   getStorage()?.setItem(ACTIVE_DOCUMENT_ID_KEY, documentId);
 }
 
+export function clearActiveDocumentId(): void {
+  getStorage()?.removeItem(ACTIVE_DOCUMENT_ID_KEY);
+}
+
 /**
  * 同一浏览器会话内的关联标识。它只辅助任务恢复，后端仍以登录用户为授权边界。
  */

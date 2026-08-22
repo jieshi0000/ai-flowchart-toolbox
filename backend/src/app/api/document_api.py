@@ -13,12 +13,19 @@ from app.api.flowchart_auth import current_flowchart_user_id
 from app.core.database import get_session
 from app.schemas.common import Result
 from app.schemas.diagram import DiagramSaveRequest
-from app.schemas.document import DocumentSaveResponse, FlowchartDocumentResponse
+from app.schemas.document import (
+    DocumentDeleteResponse,
+    DocumentSaveResponse,
+    FlowchartDocumentHistoryPage,
+    FlowchartDocumentResponse,
+)
 from app.schemas.export import ExportRequest, ExportTaskResponse
 from app.services.document_service import (
     DocumentVersionConflict,
     create_document_export,
+    delete_document,
     get_document,
+    list_documents,
     save_document,
 )
 
@@ -38,6 +45,27 @@ async def get_flowchart_document(
 ):
     return Result.success(
         data=await get_document(session, current_flowchart_user_id(request), document_id)
+    )
+
+
+@router.get(
+    "/list",
+    response_model=Result[FlowchartDocumentHistoryPage],
+    summary="查询最近流程图",
+)
+async def list_flowchart_documents(
+    request: Request,
+    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    session: AsyncSession = Depends(get_session),
+):
+    return Result.success(
+        data=await list_documents(
+            session,
+            current_flowchart_user_id(request),
+            offset=offset,
+            limit=limit,
+        )
     )
 
 
@@ -95,6 +123,25 @@ async def export_flowchart_document(
             document_id,
             payload,
             schedule_render=_enqueue_document_export,
+        )
+    )
+
+
+@router.post(
+    "/delete",
+    response_model=Result[DocumentDeleteResponse],
+    summary="永久删除流程图",
+)
+async def delete_flowchart_document(
+    request: Request,
+    document_id: Annotated[UUID, Query(alias="documentId")],
+    session: AsyncSession = Depends(get_session),
+):
+    return Result.success(
+        data=await delete_document(
+            session,
+            current_flowchart_user_id(request),
+            document_id,
         )
     )
 

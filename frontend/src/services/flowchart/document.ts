@@ -48,6 +48,25 @@ export interface FlowchartDocumentSaveResult {
   latestDocument?: FlowchartDocument | null;
 }
 
+export interface FlowchartDocumentHistoryItem {
+  id: string;
+  title: string;
+  direction: FlowchartDirection;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FlowchartDocumentHistoryPage {
+  records: FlowchartDocumentHistoryItem[];
+  offset: number;
+  limit: number;
+  hasMore: boolean;
+}
+
+export interface FlowchartDocumentDeleteResult {
+  documentId: string;
+}
+
 export interface FlowchartDocumentExportResult {
   taskId: string;
   status: FlowchartTaskStatus;
@@ -65,6 +84,16 @@ export async function getFlowchartDocument(documentId: string) {
   );
 }
 
+export async function listFlowchartDocuments(offset = 0, limit = 20) {
+  return request<FlowchartResult<FlowchartDocumentHistoryPage>>(
+    '/api/flowchart/documents/list',
+    {
+      method: 'GET',
+      params: { offset, limit },
+    },
+  );
+}
+
 export async function saveFlowchartDocument(
   documentId: string,
   payload: SaveFlowchartDocumentRequest,
@@ -75,6 +104,16 @@ export async function saveFlowchartDocument(
       method: 'POST',
       params: { documentId },
       data: payload,
+    },
+  );
+}
+
+export async function deleteFlowchartDocument(documentId: string) {
+  return request<FlowchartResult<FlowchartDocumentDeleteResult>>(
+    '/api/flowchart/documents/delete',
+    {
+      method: 'POST',
+      params: { documentId },
     },
   );
 }

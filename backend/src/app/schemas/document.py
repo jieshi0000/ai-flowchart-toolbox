@@ -3,8 +3,8 @@ from uuid import UUID
 
 from pydantic import Field
 
-from app.schemas.base import CamelVO
-from app.schemas.diagram import DiagramDocument
+from app.schemas.base import CamelVO, DatetimeFmt
+from app.schemas.diagram import DiagramDirection, DiagramDocument
 
 
 class MermaidCompilationState(StrEnum):
@@ -33,3 +33,22 @@ class DocumentSaveResponse(CamelVO):
     mermaid_source: str = ""
     mermaid_compilation: MermaidCompilation
     latest_document: FlowchartDocumentResponse | None = None
+
+
+class FlowchartDocumentHistoryItem(CamelVO):
+    id: UUID
+    title: str
+    direction: DiagramDirection
+    created_at: DatetimeFmt
+    updated_at: DatetimeFmt
+
+
+class FlowchartDocumentHistoryPage(CamelVO):
+    records: list[FlowchartDocumentHistoryItem]
+    offset: int = Field(ge=0)
+    limit: int = Field(ge=1)
+    has_more: bool
+
+
+class DocumentDeleteResponse(CamelVO):
+    document_id: UUID

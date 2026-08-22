@@ -11,11 +11,12 @@ from app.exceptions.business import BusinessException
 from app.models.document import FlowchartDocument
 from app.models.event import FlowchartEvent
 from app.models.file import FlowchartFile
+from app.models.provider_call import FlowchartProviderCall
 from app.models.task import FlowchartTask
 from app.schemas.diagram import DiagramSaveRequest
 from app.schemas.document import MermaidCompilationState
 from app.schemas.export import ExportFormat, ExportRequest
-from app.schemas.task import TaskStatus
+from app.schemas.task import TaskStatus, TaskType
 from app.services import document_service
 
 
@@ -26,11 +27,20 @@ class _ScalarResult:
     def scalar_one_or_none(self):
         return self._value
 
+    def scalars(self):
+        return self
+
+    def all(self):
+        if self._value is None:
+            return []
+        return self._value if isinstance(self._value, list) else [self._value]
+
 
 class _Session:
     def __init__(self, *query_values):
         self._query_values = list(query_values)
         self.added: list[object] = []
+        self.deleted: list[object] = []
         self.commit = AsyncMock()
         self.rollback = AsyncMock()
         self.statements = []
@@ -45,6 +55,9 @@ class _Session:
     def add(self, value):
         self.added.append(value)
 
+    async def delete(self, value):
+        self.deleted.append(value)
+
 
 def _session_factory(session):
     @asynccontextmanager
@@ -56,7 +69,7 @@ def _session_factory(session):
 
 def _document(*, version: int = 1, mermaid_source: str = "flowchart TB\nn0[\"开始\"]"):
     now = datetime.now(UTC).replace(tzinfo=None)
-    return FlowchartDocument(
+    document = FlowchartDocument(
         id=uuid4(),
         user_id="user-a",
         title="审批流程",
@@ -86,6 +99,9 @@ def _document(*, version: int = 1, mermaid_source: str = "flowchart TB\nn0[\"开
         source_task_id=uuid4(),
         expires_at=now + timedelta(days=30),
     )
+    document.created_at = now - timedelta(minutes=1)
+    document.updated_at = now
+    return document
 
 
 def _save_request(*, version: int = 1):
@@ -269,6 +285,197 @@ async def test_export_rejects_svg_until_d14():
         )
 
     assert exc_info.value.error_code == "EXPORT_FORMAT_UNSUPPORTED"
+
+
+@pytest.mark.asyncio
+async def test_list_documents_queries_current_users_recent_generated_documents_in_pages():
+    now = datetime.now(UTC).replace(tzinfo=None)
+    documents = []
+    for index in range(21):
+        document = _document()
+        document.title = f"流程图 {index}"
+        document.created_at = now - timedelta(days=1, minutes=index)
+        document.updated_at = now - timedelta(minutes=index)
+        documents.append(document)
+    session = _Session(documents)
+
+    page = await document_service.list_documents(
+        session,
+        "user-a",
+        offset=0,
+        limit=20,
+        now=now,
+    )
+
+    assert [record.title for record in page.records] == [
+        document.title for document in documents[:20]
+    ]
+    assert page.has_more is True
+    statement = str(session.statements[0])
+    assert "flowchart_document.user_id" in statement
+    assert "flowchart_document.source_task_id IS NOT NULL" in statement
+    assert "flowchart_document.expires_at >" in statement
+    assert "ORDER BY flowchart_document.updated_at DESC, flowchart_document.id DESC" in statement
+    assert 21 in session.statements[0].compile().params.values()
+
+
+@pytest.mark.asyncio
+async def test_export_creation_locks_document_against_concurrent_deletion():
+    document = _document()
+    session = _Session(document)
+
+    await document_service.create_document_export(
+        session,
+        "user-a",
+        document.id,
+        ExportRequest(format=ExportFormat.SVG),
+        schedule_render=Mock(),
+    )
+
+    assert "FOR UPDATE" in str(session.statements[0])
+
+
+@pytest.mark.asyncio
+async def test_delete_document_rejects_other_users_document():
+    document = _document()
+    session = _Session(document)
+
+    with pytest.raises(BusinessException) as exc_info:
+        await document_service.delete_document(session, "user-b", document.id, storage=_Storage())
+
+    assert exc_info.value.code == 403
+    assert session.deleted == []
+
+
+@pytest.mark.asyncio
+async def test_delete_document_blocks_pending_export_task():
+    document = _document()
+    pending_export = FlowchartTask(
+        id=uuid4(),
+        user_id="user-a",
+        type=TaskType.DIAGRAM_EXPORT.value,
+        status=TaskStatus.RENDERING.value,
+        request_snapshot={},
+        document_id=document.id,
+        idempotency_key=str(uuid4()),
+        expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(days=7),
+    )
+    session = _Session(document, [pending_export])
+
+    with pytest.raises(BusinessException) as exc_info:
+        await document_service.delete_document(session, "user-a", document.id, storage=_Storage())
+
+    assert exc_info.value.code == 409
+    assert exc_info.value.error_code == "DOCUMENT_DELETE_BLOCKED"
+    assert session.deleted == []
+    session.rollback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_delete_document_keeps_database_records_when_object_deletion_fails():
+    document = _document()
+    file = FlowchartFile(
+        id=uuid4(),
+        user_id="user-a",
+        document_id=document.id,
+        original_name="审批流程.svg",
+        stored_path="export/approval.svg",
+        file_size=4,
+        mime_type="image/svg+xml",
+        format="SVG",
+        file_role="export",
+        expires_at=datetime.now(UTC).replace(tzinfo=None) + timedelta(hours=1),
+    )
+    session = _Session(document, [], [], [file])
+    storage = _Storage()
+    storage.remove.return_value = False
+
+    with pytest.raises(BusinessException) as exc_info:
+        await document_service.delete_document(session, "user-a", document.id, storage=storage)
+
+    assert exc_info.value.code == 503
+    assert exc_info.value.error_code == "DOCUMENT_DELETE_STORAGE_FAILED"
+    assert session.deleted == []
+    session.rollback.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_delete_document_clears_related_records_and_export_object():
+    now = datetime.now(UTC).replace(tzinfo=None)
+    document = _document()
+    source_task = FlowchartTask(
+        id=document.source_task_id,
+        user_id="user-a",
+        type=TaskType.DIAGRAM_GENERATE.value,
+        status=TaskStatus.SUCCESS.value,
+        request_snapshot={},
+        result={"diagramData": "snapshot"},
+        document_id=document.id,
+        idempotency_key=str(uuid4()),
+        expires_at=now + timedelta(days=7),
+    )
+    export_task = FlowchartTask(
+        id=uuid4(),
+        user_id="user-a",
+        type=TaskType.DIAGRAM_EXPORT.value,
+        status=TaskStatus.SUCCESS.value,
+        request_snapshot={"diagramData": "snapshot"},
+        document_id=document.id,
+        idempotency_key=str(uuid4()),
+        expires_at=now + timedelta(days=7),
+    )
+    event = FlowchartEvent(
+        id=uuid4(),
+        user_id="user-a",
+        event_name="task_completed",
+        task_id=source_task.id,
+        document_id=document.id,
+        payload={"diagramData": "snapshot"},
+    )
+    provider_call = FlowchartProviderCall(
+        id=uuid4(),
+        task_id=source_task.id,
+        user_id="user-a",
+        provider_id="provider-a",
+        model_name="model-a",
+        protocol="openai_chat",
+        operation="submit",
+        status="success",
+    )
+    file = FlowchartFile(
+        id=uuid4(),
+        user_id="user-a",
+        document_id=document.id,
+        task_id=export_task.id,
+        original_name="审批流程.svg",
+        stored_path="export/approval.svg",
+        file_size=4,
+        mime_type="image/svg+xml",
+        format="SVG",
+        file_role="export",
+        expires_at=now + timedelta(hours=1),
+    )
+    session = _Session(
+        document,
+        [source_task, export_task],
+        [event],
+        [provider_call],
+        [file],
+    )
+    storage = _Storage()
+    storage.remove.return_value = True
+
+    result = await document_service.delete_document(
+        session,
+        "user-a",
+        document.id,
+        storage=storage,
+    )
+
+    assert result.document_id == document.id
+    assert session.deleted == [event, provider_call, file, source_task, export_task, document]
+    storage.remove.assert_awaited_once_with("export/approval.svg")
+    session.commit.assert_awaited_once()
 
 
 def test_save_request_rejects_client_mermaid_source():

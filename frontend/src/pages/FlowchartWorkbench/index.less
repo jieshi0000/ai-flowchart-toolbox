@@ -198,6 +198,78 @@
   padding-top: 2px;
 }
 
+.historySection {
+  display: grid;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.historyError {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.historyList {
+  display: grid;
+  gap: 7px;
+}
+
+.historyItem {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  border: 1px solid #d8e3e2;
+  border-radius: 5px;
+  background: #fbfdfd;
+}
+
+.historyItemActive {
+  border-color: #4f9b91;
+  background: #eff8f6;
+}
+
+.historyOpenButton {
+  display: grid;
+  min-width: 0;
+  flex: 1 1 auto;
+  gap: 4px;
+  padding: 7px 8px;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: #3c4b52;
+  cursor: pointer;
+  font: inherit;
+  line-height: 1.4;
+  text-align: left;
+}
+
+.historyOpenButton strong,
+.historyOpenButton span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.historyOpenButton strong {
+  color: #20262d;
+}
+
+.historyOpenButton span {
+  color: #6b7780;
+  font-size: 12px;
+}
+
+.historyOpenButton:hover,
+.historyOpenButton:focus-visible {
+  outline: none;
+  color: #0f766e;
+}
+
 .templateList {
   display: grid;
   gap: 7px;
