@@ -3,6 +3,7 @@ from pydantic import ValidationError
 
 from app.services.diagram_service import (
     compile_diagram_document,
+    compile_generated_diagram_document,
     compile_mermaid,
     validate_diagram_document,
 )
@@ -145,3 +146,29 @@ class TestMermaidCompiler:
         document = compile_diagram_document(_document(mermaidSource="flowchart TD\nuntrusted"))
 
         assert document.mermaid_source == 'flowchart TB\nn0(["Start"])\nn1(["End"])\nn0 --> n1'
+
+    def test_keeps_safe_model_mermaid_source_for_initial_preview(self):
+        model_source = 'flowchart LR\nn0(["Start"])\nn1(["End"])\nn0 --> n1'
+
+        document = compile_generated_diagram_document(
+            _document(direction="LR", mermaidSource=model_source)
+        )
+
+        assert document.mermaid_source == model_source
+
+    @pytest.mark.parametrize(
+        "model_source",
+        [
+            'flowchart TB\nn0(["Start"])\nn1(["End"])\nn0 --> n1',
+            'flowchart LR\nstart(["Start"])\nend(["End"])\nstart --> end',
+            'flowchart LR\nclick n0 "javascript:alert(1)"',
+            'flowchart LR\nstyle n0 fill:#fff',
+            'flowchart LR\n%%{init: {"theme": "dark"}}%%',
+        ],
+    )
+    def test_falls_back_to_json_compilation_for_unsafe_or_wrong_direction_model_mermaid(self, model_source):
+        document = compile_generated_diagram_document(
+            _document(direction="LR", mermaidSource=model_source)
+        )
+
+        assert document.mermaid_source == 'flowchart LR\nn0(["Start"])\nn1(["End"])\nn0 --> n1'

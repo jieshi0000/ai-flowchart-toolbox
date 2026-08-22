@@ -65,12 +65,12 @@ class TestDiagramContract:
         with pytest.raises(ValidationError):
             DiagramDocument(**payload)
 
-    def test_coordinates_must_be_finite_and_mermaid_is_derived_field(self):
+    def test_coordinates_must_be_finite_and_model_mermaid_is_a_constrained_preview_field(self):
         with pytest.raises(ValidationError):
             DiagramDocument(**_doc(nodes=[_node("a"), {**_node("b", "end", "结束"), "position": {"x": math.inf, "y": 0}}]))
         assert DiagramDocument(**_doc()).mermaid_source == ""
-        with pytest.raises(ValidationError):
-            DiagramGenerationResult(**_doc(mermaidSource="client text"))
+        generation = DiagramGenerationResult(**_doc(mermaidSource="flowchart TB\na --> b"))
+        assert generation.mermaid_source == "flowchart TB\na --> b"
         with pytest.raises(ValidationError):
             DiagramSaveRequest(**_doc(version=1, mermaidSource="client text"))
 
@@ -84,6 +84,7 @@ class TestTaskProviderExportContracts:
         )
         assert request.prompt == "生成流程"
         assert request.session_id == "browser-session-1"
+        assert request.direction == "AUTO"
         assert request.detail_level.value == "standard"
         with pytest.raises(ValidationError):
             TaskCreateRequest(prompt="x" * 4001, idempotencyKey="k")

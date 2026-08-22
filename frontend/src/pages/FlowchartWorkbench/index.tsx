@@ -66,7 +66,8 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import DiagramCanvas from './components/DiagramCanvas';
-import { createUniqueNodeId } from './components/diagramFlow';
+import { createUniqueNodeId, layoutDiagramData } from './components/diagramFlow';
+import { MermaidDiagram } from './components/MermaidDiagram';
 import { MermaidPanel } from './components/MermaidPanel';
 import { NodePropertyPanel } from './components/NodePropertyPanel';
 import styles from './index.less';
@@ -305,13 +306,16 @@ function getConnectionLabel(
 }
 
 function diagramDataFromDocument(document: FlowchartDocument): DiagramData {
-  return {
+  const data: DiagramData = {
     id: document.id,
     title: document.title,
     direction: document.direction,
     nodes: document.nodes,
     edges: document.edges,
   };
+  // 模型生成节点只提供语义结构时，位置默认都会是 0,0。首个版本进入
+  // 工作台前统一完成一次 dagre 布局；后续已保存的手工坐标保持不变。
+  return document.metadata.version === 1 ? layoutDiagramData(data) : data;
 }
 
 function providerStatusLabel(provider: FlowchartProvider): string {
@@ -666,7 +670,7 @@ const FlowchartWorkbench: React.FC = () => {
       const result = await createFlowchartTask({
         type: 'diagram_generate',
         prompt: prompt.trim(),
-        direction,
+        direction: 'AUTO',
         detailLevel,
         providerId: null,
         model: selectedModel === AUTO_ROUTE_MODEL ? null : selectedModel,
@@ -740,12 +744,8 @@ const FlowchartWorkbench: React.FC = () => {
     }
   };
 
-  const handleTemplateApply = (
-    description: string,
-    templateDirection: 'TB' | 'LR',
-  ) => {
+  const handleTemplateApply = (description: string) => {
     setPrompt(description);
-    setDirection(templateDirection);
     setSubmissionError(null);
   };
 
@@ -981,6 +981,12 @@ const FlowchartWorkbench: React.FC = () => {
       ? friendlyTaskMessage(task.errorCode, task.errorMessage)
       : task.stage || presentation?.description
     : null;
+  const directionLabel =
+    diagramData.id
+      ? direction === 'TB'
+        ? '自上而下'
+        : '从左到右'
+      : '由 AI 自主决定';
 
   return (
     <main className={styles.workbench} data-task-connection={connectionMode}>
@@ -1069,16 +1075,10 @@ const FlowchartWorkbench: React.FC = () => {
           />
 
           <div className={styles.optionGroup}>
-            <Typography.Text strong>流程方向</Typography.Text>
-            <Segmented
-              block
-              value={direction}
-              options={[
-                { label: '自上而下', value: 'TB' },
-                { label: '从左到右', value: 'LR' },
-              ]}
-              onChange={(value) => setDirection(value as 'TB' | 'LR')}
-            />
+            <Typography.Text strong>流程布局</Typography.Text>
+            <Typography.Text type="secondary" className={styles.layoutHint}>
+              AI 将根据步骤层级和分支关系自动选择纵向或横向展开方式。
+            </Typography.Text>
           </div>
 
           <div className={styles.optionGroup}>
@@ -1143,12 +1143,7 @@ const FlowchartWorkbench: React.FC = () => {
                     key={template.id}
                     className={styles.templateItem}
                     type="button"
-                    onClick={() =>
-                      handleTemplateApply(
-                        template.description,
-                        template.direction,
-                      )
-                    }
+                    onClick={() => handleTemplateApply(template.description)}
                   >
                     <span className={styles.templateItemTop}>
                       <strong>{template.name}</strong>
@@ -1292,18 +1287,24 @@ const FlowchartWorkbench: React.FC = () => {
                 }
               />
             ) : task.status === 'success' ? (
-              <div className={styles.successState}>
-                <CheckCircleFilled aria-hidden="true" />
-                <Typography.Title level={4}>流程图已生成</Typography.Title>
-                <Typography.Text type="secondary">
-                  生成结果已准备就绪
-                </Typography.Text>
-                <Button
-                  icon={<EditOutlined />}
-                  onClick={() => setActiveMode('edit')}
-                >
-                  打开编辑器
-                </Button>
+              <div className={styles.generatedPreview}>
+                <MermaidDiagram
+                  source={mermaidSource}
+                  status={mermaidStatus}
+                  error={mermaidError}
+                />
+                <div className={styles.generatedPreviewActions}>
+                  <CheckCircleFilled aria-hidden="true" />
+                  <Typography.Text type="secondary">
+                    AI 已生成流程图，可继续调整节点和连线。
+                  </Typography.Text>
+                  <Button
+                    icon={<EditOutlined />}
+                    onClick={() => setActiveMode('edit')}
+                  >
+                    打开编辑器
+                  </Button>
+                </div>
               </div>
             ) : task.status === 'failed' ? (
               <div className={styles.failureState}>
@@ -1388,7 +1389,7 @@ const FlowchartWorkbench: React.FC = () => {
                 </div>
                 <div>
                   <dt>流程方向</dt>
-                  <dd>{direction === 'TB' ? '自上而下' : '从左到右'}</dd>
+                  <dd>{directionLabel}</dd>
                 </div>
                 <div>
                   <dt>生成粒度</dt>

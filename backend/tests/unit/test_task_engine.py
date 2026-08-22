@@ -188,6 +188,35 @@ async def test_execute_sync_provider_reaches_success_and_compiles_mermaid():
 
 
 @pytest.mark.asyncio
+async def test_execute_preserves_a_safe_model_mermaid_preview():
+    model_source = 'flowchart LR\nn0(["开始"])\nn1(["结束"])\nn0 --> n1'
+    result = _diagram()
+    result.update(direction="LR", mermaidSource=model_source)
+    provider = _Provider(
+        submission=ProviderSubmission(
+            provider_request_id="request-1",
+            mode="sync",
+            status="succeeded",
+            result=result,
+        )
+    )
+    task = _task()
+    session = _Session(task)
+    engine = TaskEngine(
+        session_factory=_session_factory(session),
+        registry=_registry(provider),
+        now=lambda: datetime(2026, 8, 17, 12, 0, 1),
+    )
+
+    await engine.execute(task.id)
+
+    assert task.status == TaskStatus.SUCCESS.value
+    assert task.result["mermaidSource"] == model_source
+    document = next(call for call in session.added if not hasattr(call, "operation"))
+    assert document.mermaid_source == model_source
+
+
+@pytest.mark.asyncio
 async def test_execute_publishes_events_for_each_visible_status_transition():
     provider = _Provider(
         submission=ProviderSubmission(

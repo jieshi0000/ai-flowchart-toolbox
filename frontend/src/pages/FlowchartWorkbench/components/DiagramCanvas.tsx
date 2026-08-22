@@ -131,11 +131,19 @@ function DiagramCanvasInner({
     [nodes],
   );
   const lastDiagramSignatureRef = useRef(diagramSignature);
+  const lastDocumentIdRef = useRef(diagramData.id ?? null);
 
   useEffect(() => {
     if (lastDiagramSignatureRef.current === diagramSignature) {
       return;
     }
+    const nextDocumentId = diagramData.id ?? null;
+    if (lastDocumentIdRef.current !== nextDocumentId) {
+      // 新生成或切换的文档会先经过 dagre 布局；同步节点后重新适应视图，
+      // 防止首次结果仍停留在旧画布中心或被工具栏遮挡。
+      fitAfterLayoutRef.current = true;
+    }
+    lastDocumentIdRef.current = nextDocumentId;
     lastDiagramSignatureRef.current = diagramSignature;
     setNodes(toFlowNodes(diagramData.nodes, diagramData.direction));
     setEdges(toFlowEdges(diagramData.edges));

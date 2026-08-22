@@ -183,6 +183,11 @@
   line-height: 1.45;
 }
 
+.layoutHint {
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 .generateButton {
   width: 100%;
 }
@@ -304,6 +309,25 @@
 
 .successState > :global(.anticon) {
   font-size: 42px;
+}
+
+.generatedPreview {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 12px;
+}
+
+.generatedPreviewActions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  padding: 8px 0 0;
+  color: #0f766e;
 }
 
 .failureState {

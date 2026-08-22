@@ -54,7 +54,9 @@ class DetailLevel(StrEnum):
 class TaskCreateRequest(CamelVO):
     type: TaskType = TaskType.DIAGRAM_GENERATE
     prompt: str = Field(min_length=1, max_length=4000)
-    direction: str = Field(default="TB", pattern="^(TB|LR)$")
+    # 新版工作台统一传 AUTO，由模型根据流程层级和分支结构选择 TB 或 LR；
+    # TB/LR 继续保留给旧客户端和明确指定方向的 API 调用。
+    direction: str = Field(default="AUTO", pattern="^(AUTO|TB|LR)$")
     detail_level: DetailLevel = DetailLevel.STANDARD
     provider_id: str | None = Field(default=None, max_length=80)
     model: str | None = Field(default=None, max_length=160)
