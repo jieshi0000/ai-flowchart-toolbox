@@ -135,6 +135,30 @@ async def test_openai_chat_accepts_a_single_markdown_json_fallback():
 
 
 @pytest.mark.asyncio
+async def test_openai_chat_keeps_safe_model_mermaid_and_lets_auto_direction_be_selected():
+    diagram = _diagram()
+    diagram["direction"] = "LR"
+    diagram["mermaidSource"] = 'flowchart LR\nn0(["提交申请"])\nn1(["审批完成"])\nn0 --> n1'
+    seen: dict = {}
+
+    async def handler(request: httpx.Request):
+        seen["payload"] = json.loads(request.content)
+        return httpx.Response(200, json=_chat_response(json.dumps(diagram)), request=request)
+
+    async with HttpxTransport(transport=httpx.MockTransport(handler)) as transport:
+        provider = OpenAIChatCompletionsProvider(
+            _openai_chat_config(),
+            transport=transport,
+            key_lookup={"DEEPSEEK_TEST_KEY": "test-key"}.get,
+        )
+        submission = await provider.submit({"prompt": "生成审批流程", "direction": "AUTO"})
+
+    assert "自行判断最适合的流程图方向" in seen["payload"]["messages"][1]["content"]
+    assert submission.result["direction"] == "LR"
+    assert submission.result["mermaidSource"] == diagram["mermaidSource"]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("status_code", "headers", "expected_code", "retryable", "fallback_allowed"),
     [

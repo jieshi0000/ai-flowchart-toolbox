@@ -157,7 +157,12 @@ class OpenAIResponsesProvider(ModelProvider):
             raise ProviderResponseError("描述超过当前长度限制，请精简后重试", code="PROMPT_TOO_LONG")
 
         direction = request.get("direction")
-        direction_note = f"\n\n流程图方向必须是 {direction}。" if direction in {"TB", "LR"} else ""
+        if direction == "AUTO":
+            direction_note = "\n\n请自行判断最适合的流程图方向，并在 direction 和 mermaidSource 中使用同一个 TB 或 LR。"
+        elif direction in {"TB", "LR"}:
+            direction_note = f"\n\n流程图方向必须是 {direction}。"
+        else:
+            direction_note = ""
         payload: dict[str, Any] = {
             "model": self.config.model,
             "instructions": _SYSTEM_PROMPT,

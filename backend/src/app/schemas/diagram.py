@@ -150,7 +150,14 @@ class DiagramGraph(DiagramSchema):
 
 
 class DiagramGenerationResult(DiagramGraph):
-    """模型返回的流程图语义结构；Mermaid 不属于模型权威输出。"""
+    """模型返回的流程图语义结构和可选 Mermaid 预览源码。
+
+    ``nodes``、``edges`` 等 JSON 字段仍然是可编辑和持久化的权威数据。
+    Mermaid 仅用于首次生成后的展示；服务端会在使用前进行受限校验，编辑
+    保存后仍由权威 JSON 重新编译。
+    """
+
+    mermaid_source: str | None = Field(default=None, max_length=20_000)
 
     model_config = ConfigDict(
         extra="forbid",

@@ -32,7 +32,7 @@ from app.providers.provider_registry import (
 from app.providers.transport import ProviderTransportError
 from app.schemas.task import TERMINAL_TASK_STATUSES, TaskStatus, TaskType
 from app.services.document_service import create_generated_document
-from app.services.diagram_service import compile_diagram_document
+from app.services.diagram_service import compile_generated_diagram_document
 from app.services.event_service import (
     TaskEventPublisher,
     publish_task_event,
@@ -716,7 +716,7 @@ class TaskEngine:
         if not await self._can_validate(task_id):
             return
         try:
-            document = compile_diagram_document(dict(payload))
+            document = compile_generated_diagram_document(dict(payload))
         except (TypeError, ValidationError, ValueError):
             await self._fail_from_error(
                 task_id,

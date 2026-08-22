@@ -40,7 +40,7 @@ export interface FlowchartResult<T> {
 export interface CreateFlowchartTaskRequest {
   type: 'diagram_generate';
   prompt: string;
-  direction: 'TB' | 'LR';
+  direction: 'AUTO' | 'TB' | 'LR';
   detailLevel: 'concise' | 'standard' | 'detailed';
   providerId: string | null;
   model: string | null;

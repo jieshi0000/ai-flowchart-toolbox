@@ -25,17 +25,20 @@ from app.schemas.provider import (
     ProviderProtocol,
     ProviderStatus,
 )
-from app.services.diagram_service import compile_diagram_document
+from app.services.diagram_service import compile_generated_diagram_document
 
 
 OPENAI_CHAT_COMPLETIONS_PATH = "/v1/chat/completions"
 
 _SYSTEM_PROMPT = (
-    "根据用户描述生成流程图。只返回一个严格合法的 JSON 对象，不要使用 Markdown 代码块、"
-    "Mermaid、HTML、脚本、解释或思维过程。JSON 必须只包含 title、direction、nodes 和 edges；"
-    "direction 只能是 TB 或 LR；nodes 中每项包含 id、type、label，type 只能是 "
+    "根据用户描述生成逻辑清晰、便于阅读的流程图。只返回一个严格合法的 JSON 对象，不要使用 Markdown 代码块、"
+    "HTML、脚本、解释或思维过程。JSON 必须只包含 title、direction、nodes、edges 和 mermaidSource；"
+    "你必须根据流程层级、分支和阅读顺序，在 TB（自上而下）与 LR（从左到右）之间选择 direction。"
+    "nodes 中每项包含 id、type、label，type 只能是 "
     "start、end、process、decision、input_output 或 subprocess；edges 中每项包含 id、source、target，"
-    "可选 label 或 condition。"
+    "可选 label 或 condition。mermaidSource 必须表达与 JSON 相同的流程，第一行必须严格为 "
+    "flowchart TB 或 flowchart LR；按 nodes 数组顺序使用 n0、n1 等别名，每个节点和连线单独一行，"
+    "连线标签只能写成 -->|文本|；禁止 HTML、注释、初始化指令、click、style、class、link 或其他交互、样式和外部引用语法。"
 )
 _JSON_CODE_BLOCK_RE = re.compile(
     r"\A\s*```(?:json)?\s*(\{.*\})\s*```\s*\Z",
@@ -173,7 +176,12 @@ class OpenAIChatCompletionsProvider(ModelProvider):
             raise ProviderResponseError("描述超过当前长度限制，请精简后重试", code="PROMPT_TOO_LONG")
 
         direction = request.get("direction")
-        direction_note = f"\n\n流程图方向必须是 {direction}。" if direction in {"TB", "LR"} else ""
+        if direction == "AUTO":
+            direction_note = "\n\n请自行判断最适合的流程图方向，并在 direction 和 mermaidSource 中使用同一个 TB 或 LR。"
+        elif direction in {"TB", "LR"}:
+            direction_note = f"\n\n流程图方向必须是 {direction}。"
+        else:
+            direction_note = ""
         return {
             "model": self.config.model,
             "messages": [
@@ -259,7 +267,7 @@ def _load_single_json_object(text: str, *, request_id: str | None) -> dict[str, 
 def _validate_diagram_payload(payload: Mapping[str, Any], *, request_id: str | None) -> DiagramDocument:
     try:
         generation = DiagramGenerationResult.model_validate(dict(payload))
-        return compile_diagram_document(generation)
+        return compile_generated_diagram_document(generation)
     except (ValidationError, ValueError):
         raise ProviderResponseError(
             "供应商返回的流程图不符合规范",
