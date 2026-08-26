@@ -145,6 +145,12 @@ export const request = {
 export const layout = () => {
   return {
     logo: 'https://img.alicdn.com/tfs/TB1YHEpwUT1gK0jSZFhXXaAtVXa-28-27.svg',
+    // 工作台自带完整的三栏导航，隐藏后台模板的外层侧栏和折叠按钮。
+    siderRender: false,
+    menuRender: false,
+    headerRender: false,
+    collapsedButtonRender: false,
+    contentStyle: { margin: 0, padding: 0 },
     menu: {
       locale: false,
     },

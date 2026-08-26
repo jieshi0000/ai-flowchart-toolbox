@@ -60,6 +60,7 @@ export interface DiagramCanvasProps {
   onRedo: () => void;
   canUndo: boolean;
   canRedo: boolean;
+  theme?: 'blue' | 'purple' | 'green';
 }
 
 const NODE_TYPE_ORDER: FlowchartNodeType[] = [
@@ -99,6 +100,7 @@ function DiagramCanvasInner({
   onRedo,
   canUndo,
   canRedo,
+  theme = 'blue',
 }: DiagramCanvasProps) {
   const flowContainerRef = useRef<HTMLDivElement>(null);
   const fitAfterLayoutRef = useRef(false);
@@ -189,6 +191,11 @@ function DiagramCanvasInner({
           Math.floor(nodeIndex / NEW_NODE_COLUMN_COUNT) * NEW_NODE_VERTICAL_GAP,
       };
       const style = NODE_STYLE_BY_TYPE[type];
+      const themeColors = theme === 'purple'
+        ? { fill: '#f5f1ff', stroke: '#d3c7ff' }
+        : theme === 'green'
+          ? { fill: '#edfbf5', stroke: '#b5e3d0' }
+          : { fill: '#eef5ff', stroke: '#b9d2ff' };
       const nextNode: DiagramNode = {
         id: createUniqueNodeId(diagramData.nodes),
         type,
@@ -197,7 +204,7 @@ function DiagramCanvasInner({
           x: center.x + gridOffset.x,
           y: center.y + gridOffset.y,
         }),
-        style,
+        style: { ...style, ...themeColors },
       };
       onChange((current) => ({
         ...current,
@@ -205,7 +212,7 @@ function DiagramCanvasInner({
       }));
       onSelectElement({ type: 'node', id: nextNode.id });
     },
-    [diagramData.nodes, onChange, onSelectElement, screenToFlowPosition],
+    [diagramData.nodes, onChange, onSelectElement, screenToFlowPosition, theme],
   );
 
   const handleNodeDragStop = useCallback<OnNodeDrag<FlowchartCanvasNode>>(
@@ -431,7 +438,7 @@ function DiagramCanvasInner({
           variant={BackgroundVariant.Dots}
           gap={18}
           size={1}
-          color="#c4d8d4"
+          color="#d5e1f2"
         />
         <Controls showInteractive={false} />
         <MiniMap
