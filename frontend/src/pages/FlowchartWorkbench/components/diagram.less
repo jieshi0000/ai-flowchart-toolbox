@@ -4,7 +4,9 @@
   height: 100%;
   min-height: 360px;
   overflow: hidden;
-  background: #f7fbfa;
+  background-color: #f9fbff;
+  background-image: radial-gradient(#d5e1f2 0.8px, transparent 0.8px);
+  background-size: 24px 24px;
 }
 
 .reactFlow {
@@ -13,46 +15,46 @@
 }
 
 .reactFlow :global(.react-flow__background) {
-  background: #f7fbfa;
+  background: transparent;
 }
 
 .reactFlow :global(.react-flow__controls) {
   overflow: hidden;
-  border: 1px solid #cbdad8;
-  border-radius: 5px;
-  box-shadow: 0 3px 12px rgba(25, 55, 53, 0.1);
+  border: 1px solid #e4e9f1;
+  border-radius: 10px;
+  box-shadow: 0 8px 18px rgba(28, 48, 83, 0.1);
 }
 
 .reactFlow :global(.react-flow__controls-button) {
   width: 30px;
   height: 30px;
-  border-bottom-color: #d9e6e4;
+  border-bottom-color: #e4e9f1;
   background: #ffffff;
-  color: #315d59;
+  color: #63728a;
 }
 
 .reactFlow :global(.react-flow__minimap) {
   overflow: hidden;
-  border: 1px solid #cbdad8;
-  border-radius: 5px;
+  border: 1px solid #e4e9f1;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.92);
 }
 
 .canvasToolbar {
   position: absolute;
   z-index: 5;
-  top: 12px;
-  left: 12px;
+  top: 14px;
+  left: 14px;
   display: flex;
   max-width: calc(100% - 24px);
   align-items: center;
   gap: 6px;
-  padding: 6px;
+  padding: 5px;
   overflow-x: auto;
-  border: 1px solid #d2e0de;
-  border-radius: 5px;
+  border: 1px solid #e4e9f1;
+  border-radius: 10px;
   background: rgba(255, 255, 255, 0.94);
-  box-shadow: 0 3px 12px rgba(25, 55, 53, 0.08);
+  box-shadow: 0 8px 18px rgba(28, 48, 83, 0.1);
 }
 
 .canvasToolbar :global(.ant-btn) {
@@ -76,18 +78,18 @@
   width: min(360px, calc(100% - 32px));
   justify-items: center;
   gap: 9px;
-  padding: 18px;
+  padding: 22px;
   transform: translate(-50%, -50%);
-  border: 1px dashed #b8d0cc;
-  border-radius: 6px;
+  border: 1px dashed #b9d2ff;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.92);
-  color: #526763;
+  color: #6f7d93;
   text-align: center;
 }
 
 .emptyCanvasTitle {
-  color: #263d3a;
-  font-weight: 600;
+  color: #34415a;
+  font-weight: 700;
 }
 
 .canvasHint {
@@ -97,10 +99,10 @@
   bottom: 12px;
   max-width: min(330px, calc(100% - 28px));
   padding: 5px 8px;
-  border: 1px solid #d9e6e4;
-  border-radius: 4px;
+  border: 1px solid #e4e9f1;
+  border-radius: 7px;
   background: rgba(255, 255, 255, 0.88);
-  color: #6a7d79;
+  color: #8593a8;
   font-size: 12px;
   line-height: 1.4;
   text-align: right;
@@ -122,15 +124,16 @@
   justify-items: center;
   gap: 2px;
   padding: 9px 12px;
-  border: 2px solid var(--node-stroke);
+  border: 1px solid var(--node-stroke);
   background: var(--node-fill);
-  color: #213a37;
+  box-shadow: 0 4px 10px rgba(40, 100, 200, 0.06);
+  color: #24549e;
   text-align: center;
   transition: box-shadow 120ms ease, border-color 120ms ease;
 }
 
 .nodeSelected .nodeShell {
-  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.2);
+  box-shadow: 0 0 0 3px rgba(36, 107, 253, 0.2);
 }
 
 .start,
@@ -139,7 +142,7 @@
 }
 
 .process {
-  border-radius: 5px;
+  border-radius: 10px;
 }
 
 .decision {
@@ -165,20 +168,20 @@
 
 .subprocess {
   position: relative;
-  border-radius: 5px;
+  border-radius: 10px;
 }
 
 .subprocess::after {
   position: absolute;
   inset: 4px;
   border: 1px solid var(--node-stroke);
-  border-radius: 3px;
+  border-radius: 6px;
   content: '';
   pointer-events: none;
 }
 
 .nodeTypeLabel {
-  color: #6c817d;
+  color: #718198;
   font-size: 10px;
   line-height: 1.1;
 }
@@ -194,7 +197,7 @@
   width: 9px;
   height: 9px;
   border: 2px solid #ffffff;
-  background: #3d8d84;
+  background: #246bfd;
 }
 
 .edgeEditor {
@@ -284,10 +287,10 @@
   gap: 6px;
   padding: 8px 10px;
   overflow-wrap: anywhere;
-  border: 1px solid #dce8e6;
-  border-radius: 4px;
-  background: #f7fbfa;
-  color: #315d59;
+  border: 1px solid #dce5f1;
+  border-radius: 7px;
+  background: #f9fbff;
+  color: #24549e;
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
   font-size: 12px;
 }
@@ -313,8 +316,8 @@
   place-items: center;
   padding: 24px;
   overflow: auto;
-  border: 1px solid #d2e0de;
-  border-radius: 6px;
+  border: 1px solid #dce5f1;
+  border-radius: 12px;
   background: #ffffff;
 }
 

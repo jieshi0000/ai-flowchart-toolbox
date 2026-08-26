@@ -42,13 +42,15 @@ import {
 import {
   ApartmentOutlined,
   CheckCircleFilled,
-  CloudServerOutlined,
   DeleteOutlined,
   DownloadOutlined,
   EditOutlined,
   ExportOutlined,
   FileTextOutlined,
   LoadingOutlined,
+  PlusOutlined,
+  UploadOutlined,
+  ClockCircleOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
   SaveOutlined,
@@ -64,11 +66,9 @@ import {
   message,
   Modal,
   Popconfirm,
-  Progress,
   Segmented,
   Select,
   Spin,
-  Tag,
   Tooltip,
   Typography,
 } from 'antd';
@@ -93,6 +93,19 @@ interface RequestFailure {
   errorCode?: string | number | null;
   message?: string | null;
 }
+
+type DiagramTheme = 'blue' | 'purple' | 'green';
+const DIAGRAM_THEME_STYLES: Record<DiagramTheme, Record<DiagramNode['type'], { fill: string; stroke: string }>> = {
+  blue: {
+    start: { fill: '#eef5ff', stroke: '#8eb8ff' }, end: { fill: '#edf3ff', stroke: '#8eb8ff' }, process: { fill: '#eef5ff', stroke: '#b9d2ff' }, decision: { fill: '#fff8e7', stroke: '#e9c77a' }, input_output: { fill: '#eef7fb', stroke: '#9ccfe5' }, subprocess: { fill: '#f3f0ff', stroke: '#c8baf5' },
+  },
+  purple: {
+    start: { fill: '#f3f0ff', stroke: '#b7a8f0' }, end: { fill: '#f3f0ff', stroke: '#b7a8f0' }, process: { fill: '#f5f1ff', stroke: '#d3c7ff' }, decision: { fill: '#fff8e7', stroke: '#e9c77a' }, input_output: { fill: '#f1f4ff', stroke: '#b8c6f1' }, subprocess: { fill: '#f7efff', stroke: '#d9bdf5' },
+  },
+  green: {
+    start: { fill: '#eafaf4', stroke: '#8ed3b6' }, end: { fill: '#eafaf4', stroke: '#8ed3b6' }, process: { fill: '#edfbf5', stroke: '#b5e3d0' }, decision: { fill: '#fff8e7', stroke: '#e9c77a' }, input_output: { fill: '#eefaf8', stroke: '#9fd8cf' }, subprocess: { fill: '#f0f8f4', stroke: '#b8ddc8' },
+  },
+};
 
 const TASK_PRESENTATIONS: Record<FlowchartTaskStatus, TaskPresentation> = {
   waiting: {
@@ -329,6 +342,17 @@ function diagramDataFromDocument(document: FlowchartDocument): DiagramData {
   return document.metadata.version === 1 ? layoutDiagramData(data) : data;
 }
 
+function applyDiagramTheme(data: DiagramData, theme: DiagramTheme): DiagramData {
+  const palette = DIAGRAM_THEME_STYLES[theme];
+  return {
+    ...data,
+    nodes: data.nodes.map((node) => ({
+      ...node,
+      style: { ...palette[node.type] },
+    })),
+  };
+}
+
 function providerStatusLabel(provider: FlowchartProvider): string {
   if (provider.status === 'healthy') {
     return '可用';
@@ -434,6 +458,7 @@ const FlowchartWorkbench: React.FC = () => {
   const [activeMode, setActiveMode] = useState<
     'generate' | 'edit' | 'mermaid' | 'export'
   >('generate');
+  const [diagramTheme, setDiagramTheme] = useState<DiagramTheme>('blue');
   const [exportFormat, setExportFormat] =
     useState<FlowchartExportFormat>('SVG');
   const [exportBackground, setExportBackground] = useState<
@@ -455,6 +480,7 @@ const FlowchartWorkbench: React.FC = () => {
   const restoreStarted = useRef(false);
   const documentRestoreStarted = useRef(false);
   const loadedDocumentIdRef = useRef<string | null>(null);
+  const referenceFileInput = useRef<HTMLInputElement>(null);
   const canUndo = useStore(
     useFlowchartWorkbenchStore.temporal,
     (state) => state.pastStates.length > 0,
@@ -493,7 +519,7 @@ const FlowchartWorkbench: React.FC = () => {
 
   const applyDocument = useCallback(
     (document: FlowchartDocument) => {
-      setDiagramData(diagramDataFromDocument(document));
+      setDiagramData(applyDiagramTheme(diagramDataFromDocument(document), diagramTheme));
       markDiagramSaved();
       setDirection(document.direction);
       setDocumentVersion(document.metadata.version);
@@ -515,6 +541,7 @@ const FlowchartWorkbench: React.FC = () => {
       setMermaidPreview,
       setSelectedElement,
       refreshHistory,
+      diagramTheme,
     ],
   );
 
@@ -1125,287 +1152,42 @@ const FlowchartWorkbench: React.FC = () => {
         ? '自上而下'
         : '从左到右'
       : '由 AI 自主决定';
+  const projectTitle = diagramData.title || '未命名流程图';
 
   return (
     <main className={styles.workbench} data-task-connection={connectionMode}>
-      <header className={styles.header}>
-        <div className={styles.titleGroup}>
-          <span className={styles.logoMark} aria-hidden="true">
-            <ApartmentOutlined />
-          </span>
-          <div>
-            <Typography.Title level={4}>AI 生成流程图</Typography.Title>
-            <Typography.Text type="secondary">工作台</Typography.Text>
-          </div>
+      <aside className={styles.sidebar} aria-label="项目导航">
+        <div className={styles.brand}>
+          <span className={styles.logoMark} aria-hidden="true"><ApartmentOutlined /></span>
+          <div><strong>FlowPilot AI</strong><span>智能流程图工作台</span></div>
         </div>
-        <div className={styles.headerStatus}>
-          <CloudServerOutlined aria-hidden="true" />
-          <Badge
-            status={
-              hasNoAvailableModel || providerLoadState === 'failed'
-                ? 'warning'
-                : 'success'
-            }
-            text={hasNoAvailableModel ? '暂无可用模型' : '模型服务'}
-          />
-          {hasUnsavedChanges ? <Tag color="gold">未保存编辑</Tag> : null}
+        <Button className={styles.newProjectButton} type="primary" icon={<PlusOutlined />} onClick={handleResetDiagram}>新建流程图</Button>
+        <button className={styles.uploadBox} type="button" onClick={() => referenceFileInput.current?.click()}>
+          <UploadOutlined /><strong>上传参考文件</strong><span>支持 PDF、Word、图片<br />AI 将自动提取流程信息</span>
+        </button>
+        <input ref={referenceFileInput} className={styles.hiddenInput} type="file" accept=".pdf,.doc,.docx,image/*" onChange={(event) => { const file = event.target.files?.[0]; if (file) message.success(`已选择参考文件：${file.name}`); }} />
+        <div className={styles.sidebarSectionTitle}><ClockCircleOutlined /> 最近项目 {historyLoading ? <Spin size="small" /> : null}</div>
+        <div className={styles.historyList}>
+          {historyError ? <Typography.Text type="secondary">最近项目暂时无法加载</Typography.Text> : null}
+          {historyRecords.map((record) => (
+            <div key={record.id} className={`${styles.historyItem} ${diagramData.id === record.id ? styles.historyItemActive : ''}`}>
+              <button className={styles.historyOpenButton} type="button" onClick={() => handleOpenHistoryDocument(record)}><span className={styles.historyIcon}><ApartmentOutlined /></span><span><strong>{record.title}</strong><small>{record.updatedAt}</small></span></button>
+              <Popconfirm title="永久删除此流程图？" okText="永久删除" cancelText="取消" okButtonProps={{ danger: true }} onConfirm={() => handleDeleteHistoryDocument(record.id)}><Button aria-label={`删除 ${record.title}`} danger icon={<DeleteOutlined />} loading={deletingDocumentId === record.id} size="small" type="text" /></Popconfirm>
+            </div>
+          ))}
+          {!historyRecords.length && !historyLoading ? <Typography.Text type="secondary">暂无最近项目</Typography.Text> : null}
         </div>
-      </header>
+        {historyHasMore ? <Button type="link" size="small" onClick={() => void loadHistory(historyRecords.length, true)}>加载更多</Button> : null}
+        <div className={styles.sidebarFooter}><span className={styles.statusDot} /><span>AI 服务运行正常</span><Typography.Text type="secondary">{hasNoAvailableModel ? '暂无可用模型' : '模型已连接'}</Typography.Text></div>
+      </aside>
 
-      <nav className={styles.modeBar} aria-label="工作台模式">
-        <Segmented
-          value={activeMode}
-          options={[
-            { label: '生成', value: 'generate', icon: <PlayCircleOutlined /> },
-            {
-              label: '编辑',
-              value: 'edit',
-              icon: <EditOutlined />,
-            },
-            {
-              label: 'Mermaid',
-              value: 'mermaid',
-              icon: <FileTextOutlined />,
-            },
-            {
-              label: '导出',
-              value: 'export',
-              icon: <ExportOutlined />,
-              disabled: !diagramData.id || documentVersion === null,
-            },
-          ]}
-          onChange={(value) =>
-            setActiveMode(value as 'generate' | 'edit' | 'mermaid' | 'export')
-          }
-        />
-      </nav>
-
-      {showProviderNotice ? (
-        <Alert
-          className={styles.providerNotice}
-          type="warning"
-          showIcon
-          closable
-          message="当前默认供应商响应异常，正在尝试降级/路由"
-          onClose={dismissProviderNotice}
-        />
-      ) : null}
-
-      <section className={styles.workspace} aria-label="流程图工作区">
-        <section className={styles.promptPanel} aria-label="生成设置">
-          <div className={styles.panelHeader}>
-            <Typography.Text strong>流程描述</Typography.Text>
-            <Typography.Text type="secondary">
-              {prompt.length}/4000
-            </Typography.Text>
-          </div>
-
-          <label className={styles.fieldLabel} htmlFor="flowchart-prompt">
-            描述业务步骤、判断条件和参与角色
-          </label>
-          <Input.TextArea
-            id="flowchart-prompt"
-            value={prompt}
-            maxLength={4000}
-            autoSize={{ minRows: 7, maxRows: 11 }}
-            placeholder="例如：员工提交请假申请，主管审批；不通过时退回修改。"
-            onChange={(event) => setPrompt(event.target.value)}
-          />
-
-          <div className={styles.optionGroup}>
-            <Typography.Text strong>流程布局</Typography.Text>
-            <Typography.Text type="secondary" className={styles.layoutHint}>
-              AI 将根据步骤层级和分支关系自动选择纵向或横向展开方式。
-            </Typography.Text>
-          </div>
-
-          <div className={styles.optionGroup}>
-            <Typography.Text strong>生成粒度</Typography.Text>
-            <Segmented
-              block
-              value={detailLevel}
-              options={[
-                { label: '简洁', value: 'concise' },
-                { label: '标准', value: 'standard' },
-                { label: '详细', value: 'detailed' },
-              ]}
-              onChange={(value) =>
-                setDetailLevel(value as 'concise' | 'standard' | 'detailed')
-              }
-            />
-          </div>
-
-          <div className={styles.optionGroup}>
-            <Typography.Text strong>模型</Typography.Text>
-            <Select
-              value={selectedModel}
-              loading={providerLoadState === 'loading'}
-              disabled={hasNoAvailableModel}
-              options={modelOptions}
-              onChange={setSelectedModel}
-            />
-            {hasNoAvailableModel ? (
-              <Typography.Text className={styles.inlineWarning} type="warning">
-                当前没有可用模型，请稍后刷新重试
-              </Typography.Text>
-            ) : null}
-          </div>
-
-          <Button
-            className={styles.generateButton}
-            type="primary"
-            size="large"
-            icon={<SendOutlined />}
-            loading={isCreating}
-            disabled={!canGenerate}
-            onClick={() => void handleGenerate()}
-          >
-            生成流程图
-          </Button>
-
-          <div className={styles.historySection}>
-            <div className={styles.panelHeader}>
-              <Typography.Text strong>最近流程图</Typography.Text>
-              {historyLoading ? <Spin size="small" /> : null}
-            </div>
-            {historyError ? (
-              <div className={styles.historyError}>
-                <Typography.Text type="secondary">
-                  最近流程图暂时无法加载
-                </Typography.Text>
-                <Button size="small" type="link" onClick={() => void refreshHistory()}>
-                  重试
-                </Button>
-              </div>
-            ) : null}
-            {historyRecords.length ? (
-              <div className={styles.historyList}>
-                {historyRecords.map((record) => (
-                  <div
-                    key={record.id}
-                    className={`${styles.historyItem} ${
-                      diagramData.id === record.id ? styles.historyItemActive : ''
-                    }`}
-                  >
-                    <button
-                      className={styles.historyOpenButton}
-                      type="button"
-                      onClick={() => handleOpenHistoryDocument(record)}
-                    >
-                      <strong>{record.title}</strong>
-                      <span>
-                        {record.direction === 'TB' ? '自上而下' : '从左到右'} · 最近编辑{' '}
-                        {record.updatedAt}
-                      </span>
-                    </button>
-                    <Popconfirm
-                      title="永久删除此流程图？"
-                      description="删除后不可恢复，关联导出文件也会删除。"
-                      okText="永久删除"
-                      cancelText="取消"
-                      okButtonProps={{ danger: true }}
-                      onConfirm={() => handleDeleteHistoryDocument(record.id)}
-                    >
-                      <Button
-                        aria-label={`删除 ${record.title}`}
-                        danger
-                        icon={<DeleteOutlined />}
-                        loading={deletingDocumentId === record.id}
-                        size="small"
-                        type="text"
-                      />
-                    </Popconfirm>
-                  </div>
-                ))}
-                {historyHasMore ? (
-                  <Button
-                    block
-                    loading={historyLoading}
-                    onClick={() => void loadHistory(historyRecords.length, true)}
-                  >
-                    加载更多
-                  </Button>
-                ) : null}
-              </div>
-            ) : historyLoading ? null : (
-              <Empty
-                image={Empty.PRESENTED_IMAGE_SIMPLE}
-                description="暂无最近流程图"
-                styles={{ image: { height: 32 } }}
-              />
-            )}
-          </div>
-
-          <div className={styles.templateSection}>
-            <div className={styles.panelHeader}>
-              <Typography.Text strong>内置模板</Typography.Text>
-              <Tag color="cyan">示例</Tag>
-            </div>
-            {templateLoadState === 'loading' ? (
-              <Spin size="small" />
-            ) : templateLoadState === 'failed' ? (
-              <Typography.Text type="secondary">
-                内置模板暂不可用
-              </Typography.Text>
-            ) : (
-              <div className={styles.templateList}>
-                {templates.map((template) => (
-                  <button
-                    key={template.id}
-                    className={styles.templateItem}
-                    type="button"
-                    onClick={() => handleTemplateApply(template.description)}
-                  >
-                    <span className={styles.templateItemTop}>
-                      <strong>{template.name}</strong>
-                      <Tag>{template.category}</Tag>
-                    </span>
-                    <span>{template.description}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className={styles.previewPanel} aria-label="流程图预览">
-          <div className={styles.previewHeader}>
-            <Typography.Text strong>
-              {activeMode === 'edit'
-                ? '流程图编辑器'
-                : activeMode === 'mermaid'
-                ? 'Mermaid 只读预览'
-                : '流程图预览'}
-            </Typography.Text>
-            <div className={styles.previewActions}>
-              {activeMode === 'edit' ? (
-                <Tooltip title="保存流程图">
-                  <Button
-                    size="small"
-                    type="primary"
-                    icon={<SaveOutlined />}
-                    loading={isSaving}
-                    disabled={
-                      !diagramData.id ||
-                      documentVersion === null ||
-                      !hasUnsavedChanges
-                    }
-                    onClick={() => void handleSaveDocument()}
-                  >
-                    保存
-                  </Button>
-                </Tooltip>
-              ) : null}
-              {presentation ? (
-                <Badge status={presentation.badge} text={presentation.label} />
-              ) : null}
-            </div>
-          </div>
-          <div
-            className={`${styles.previewContent} ${
-              activeMode === 'edit' ? styles.canvasContent : ''
-            } ${activeMode === 'mermaid' ? styles.mermaidContent : ''}`}
-          >
+      <section className={styles.canvasPanel} aria-label="流程图画布">
+        <header className={styles.canvasHeader}>
+          <div className={styles.projectHeader}><span className={styles.projectIcon}><ApartmentOutlined /></span><div><strong>{projectTitle}</strong><span><i /> {hasUnsavedChanges ? '有未保存修改' : '已自动保存'}</span></div></div>
+          <div className={styles.headerActions}><Button size="small" icon={<ReloadOutlined />} onClick={handleResetDiagram}>重置画布</Button><Button size="small" icon={<SaveOutlined />} disabled={!hasUnsavedChanges} loading={isSaving} onClick={() => void handleSaveDocument()}>保存</Button></div>
+        </header>
+        <div className={styles.canvasModeBar}><Segmented value={activeMode} options={[{ label: '生成', value: 'generate', icon: <PlayCircleOutlined /> }, { label: '编辑', value: 'edit', icon: <EditOutlined /> }, { label: 'Mermaid', value: 'mermaid', icon: <FileTextOutlined /> }, { label: '导出', value: 'export', icon: <ExportOutlined />, disabled: !diagramData.id || documentVersion === null }]} onChange={(value) => setActiveMode(value as 'generate' | 'edit' | 'mermaid' | 'export')} /></div>
+        <div className={`${styles.previewContent} ${activeMode === 'edit' ? styles.canvasContent : ''} ${activeMode === 'mermaid' ? styles.mermaidContent : ''}`}>
             {activeMode === 'edit' ? (
               <DiagramCanvas
                 diagramData={diagramData}
@@ -1417,6 +1199,7 @@ const FlowchartWorkbench: React.FC = () => {
                 onRedo={handleRedo}
                 canUndo={canUndo}
                 canRedo={canRedo}
+                theme={diagramTheme}
               />
             ) : activeMode === 'mermaid' ? (
               <MermaidPanel
@@ -1426,43 +1209,55 @@ const FlowchartWorkbench: React.FC = () => {
               />
             ) : activeMode === 'export' ? (
               <div className={styles.exportPanel}>
-                <Typography.Title level={4}>导出流程图</Typography.Title>
-                <Typography.Text type="secondary">
-                  导出使用当前已保存的文档版本，不影响画布编辑。
-                </Typography.Text>
+                <div className={styles.exportPanelHeader}>
+                  <Typography.Title level={4}>导出流程图</Typography.Title>
+                  <Typography.Text type="secondary">导出使用当前已保存的文档版本，不影响画布编辑。</Typography.Text>
+                </div>
                 <div className={styles.exportField}>
                   <Typography.Text strong>文件格式</Typography.Text>
-                  <Segmented
-                    block
-                    value={exportFormat}
-                    options={[
-                      { label: 'SVG', value: 'SVG' },
-                      { label: 'PNG', value: 'PNG' },
-                      { label: 'Mermaid', value: 'MERMAID' },
-                      { label: 'JSON', value: 'JSON' },
-                    ]}
-                    onChange={(value) =>
-                      setExportFormat(value as FlowchartExportFormat)
-                    }
-                  />
+                  <div className={styles.exportOptions} role="radiogroup" aria-label="文件格式">
+                    {([
+                      ['SVG', 'SVG'],
+                      ['PNG', 'PNG'],
+                      ['Mermaid', 'MERMAID'],
+                      ['JSON', 'JSON'],
+                    ] as const).map(([label, value]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        role="radio"
+                        aria-checked={exportFormat === value}
+                        className={`${styles.exportOption} ${exportFormat === value ? styles.exportOptionSelected : ''}`}
+                        onClick={() => setExportFormat(value as FlowchartExportFormat)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
                 {(exportFormat === 'SVG' || exportFormat === 'PNG') && (
                   <div className={styles.exportField}>
                     <Typography.Text strong>背景</Typography.Text>
-                    <Segmented
-                      block
-                      value={exportBackground}
-                      options={[
-                        { label: '透明', value: 'transparent' },
-                        { label: '白色', value: 'white' },
-                      ]}
-                      onChange={(value) =>
-                        setExportBackground(value as 'transparent' | 'white')
-                      }
-                    />
+                    <div className={`${styles.exportOptions} ${styles.backgroundOptions}`} role="radiogroup" aria-label="背景">
+                      {([
+                        ['透明', 'transparent'],
+                        ['白色', 'white'],
+                      ] as const).map(([label, value]) => (
+                        <button
+                          key={value}
+                          type="button"
+                          role="radio"
+                          aria-checked={exportBackground === value}
+                          className={`${styles.exportOption} ${exportBackground === value ? styles.exportOptionSelected : ''}`}
+                          onClick={() => setExportBackground(value)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
-                <Button
+                <Button className={styles.exportSubmit}
                   type="primary"
                   icon={<ExportOutlined />}
                   loading={isExporting}
@@ -1547,136 +1342,33 @@ const FlowchartWorkbench: React.FC = () => {
           </div>
         </section>
 
-        <aside className={styles.detailPanel} aria-label="任务信息">
-          {activeMode === 'edit' ? (
-            <>
-              <NodePropertyPanel
-                diagramData={diagramData}
-                selectedElement={selectedElement}
-                onChange={setDiagramData}
-                onSelectElement={setSelectedElement}
-                onDeleteSelected={handleDeleteSelectedElement}
-                onDuplicateNode={handleDuplicateNode}
-              />
-              <MermaidPanel
-                source={mermaidSource}
-                status={mermaidStatus}
-                error={mermaidError}
-              />
-            </>
-          ) : activeMode === 'export' ? (
-            <>
-              <div className={styles.panelHeader}>
-                <Typography.Text strong>导出任务</Typography.Text>
-              </div>
-              <dl className={styles.detailList}>
-                <div>
-                  <dt>文件格式</dt>
-                  <dd>{exportFormat}</dd>
+        <aside className={styles.assistantPanel} aria-label="AI 流程图助手">
+          <header className={styles.assistantHeader}>
+            <span>FLOWCHART GENERATOR</span>
+            <h1>AI 流程图助手</h1>
+            <p>输入一句描述，自动整理逻辑、节点与流程关系。</p>
+          </header>
+          <div className={styles.assistantBody}>
+            {showProviderNotice ? <Alert className={styles.providerNotice} type="warning" showIcon closable message="当前默认供应商响应异常，正在尝试降级/路由" onClose={dismissProviderNotice} /> : null}
+            {activeMode === 'edit' ? <NodePropertyPanel diagramData={diagramData} selectedElement={selectedElement} onChange={setDiagramData} onSelectElement={setSelectedElement} onDeleteSelected={handleDeleteSelectedElement} onDuplicateNode={handleDuplicateNode} /> : activeMode === 'export' ? <div className={styles.exportSummary}><Typography.Text strong>导出任务</Typography.Text><dl className={styles.detailList}><div><dt>文件格式</dt><dd>{exportFormat}</dd></div><div><dt>任务状态</dt><dd>{presentation?.label || '等待创建'}</dd></div><div><dt>文档版本</dt><dd>{documentVersion ?? '-'}</dd></div></dl></div> : <>
+              <section className={styles.promptCard}>
+                <h2>开始创建你的流程图</h2>
+                <p>越清晰地描述场景、角色与步骤，生成结果越准确。</p>
+                <div className={styles.assistantTabs}><button className={styles.assistantTabActive} type="button">文字生成</button><button type="button" onClick={() => referenceFileInput.current?.click()}>参考文件</button></div>
+                <Input.TextArea id="flowchart-prompt" value={prompt} maxLength={4000} autoSize={{ minRows: 5, maxRows: 8 }} placeholder="例如：生成一个电商订单从用户下单、支付、仓库发货到售后评价的完整流程图" onChange={(event) => setPrompt(event.target.value)} />
+                <div className={styles.formGrid}>
+                  <Select value={direction} options={[{ value: 'LR', label: '横向布局' }, { value: 'TB', label: '纵向布局' }]} onChange={(value) => setDirection(value as 'LR' | 'TB')} />
+                  <Select value={detailLevel} options={[{ value: 'concise', label: '简洁' }, { value: 'standard', label: '标准' }, { value: 'detailed', label: '详细' }]} onChange={(value) => setDetailLevel(value as 'concise' | 'standard' | 'detailed')} />
+                  <Select value={selectedModel} loading={providerLoadState === 'loading'} disabled={hasNoAvailableModel} options={modelOptions} onChange={setSelectedModel} />
+                  <Select value={diagramTheme} options={[{ value: 'blue', label: '商务蓝' }, { value: 'purple', label: '科技紫' }, { value: 'green', label: '清新绿' }]} onChange={(value) => { const nextTheme = value as DiagramTheme; setDiagramTheme(nextTheme); setDiagramData((current) => applyDiagramTheme(current, nextTheme)); }} />
                 </div>
-                <div>
-                  <dt>任务状态</dt>
-                  <dd>{presentation?.label || '等待创建'}</dd>
-                </div>
-                <div>
-                  <dt>文档版本</dt>
-                  <dd>{documentVersion ?? '-'}</dd>
-                </div>
-              </dl>
-            </>
-          ) : (
-            <>
-              <div className={styles.panelHeader}>
-                <Typography.Text strong>生成信息</Typography.Text>
-              </div>
-              <dl className={styles.detailList}>
-                <div>
-                  <dt>任务状态</dt>
-                  <dd>{presentation?.label || '等待生成'}</dd>
-                </div>
-                <div>
-                  <dt>连接状态</dt>
-                  <dd>{getConnectionLabel(connectionMode, Boolean(task))}</dd>
-                </div>
-                <div>
-                  <dt>流程方向</dt>
-                  <dd>{directionLabel}</dd>
-                </div>
-                <div>
-                  <dt>生成粒度</dt>
-                  <dd>
-                    {detailLevel === 'concise'
-                      ? '简洁'
-                      : detailLevel === 'detailed'
-                      ? '详细'
-                      : '标准'}
-                  </dd>
-                </div>
-                <div>
-                  <dt>模型选择</dt>
-                  <dd>
-                    {selectedModel === AUTO_ROUTE_MODEL
-                      ? '自动路由'
-                      : selectedModel}
-                  </dd>
-                </div>
-              </dl>
-            </>
-          )}
+                <Button className={styles.generateButton} type="primary" icon={<SendOutlined />} loading={isCreating} disabled={!canGenerate} onClick={() => void handleGenerate()}>生成流程图</Button>
+              </section>
+              <section className={styles.templateSection}><div className={styles.templateHeader}><strong>常用流程模板</strong><span>点击快速生成</span></div>{templateLoadState === 'loading' ? <Spin size="small" /> : templateLoadState === 'failed' ? <Typography.Text type="secondary">内置模板暂不可用</Typography.Text> : <div className={styles.templateList}>{templates.map((template) => <button key={template.id} className={styles.templateItem} type="button" onClick={() => handleTemplateApply(template.description)}><strong>{template.name}</strong><span>{template.description}</span></button>)}</div>}</section>
+            </>}
+            {activeMode !== 'edit' && activeMode !== 'export' ? <div className={styles.assistantStatus}><Badge status={isCreating ? 'processing' : presentation?.badge || 'default'} text={isCreating ? '正在创建任务' : presentation?.label || '等待生成'} /><Typography.Text type="secondary">{submissionError || documentActionError || currentTaskMessage || getConnectionLabel(connectionMode, Boolean(task))}</Typography.Text>{task && CANCELLABLE_TASK_STATUSES.has(task.status) ? <Button size="small" icon={<StopOutlined />} onClick={() => void handleCancel()}>取消</Button> : null}{task && ['failed', 'canceled', 'expired'].includes(task.status) ? <Button size="small" icon={<ReloadOutlined />} onClick={() => void handleRetry()}>重试</Button> : null}</div> : null}
+          </div>
         </aside>
-      </section>
-
-      <footer className={styles.taskBar} aria-live="polite">
-        <div className={styles.taskProgress}>
-          <Badge
-            status={
-              isCreating ? 'processing' : presentation?.badge || 'default'
-            }
-            text={
-              isCreating ? '正在创建任务' : presentation?.label || '等待生成'
-            }
-          />
-          <Progress
-            className={styles.progress}
-            percent={isCreating ? 0 : task?.progress || 0}
-            size="small"
-            showInfo={false}
-            status={
-              task?.status === 'failed'
-                ? 'exception'
-                : task?.status === 'success'
-                ? 'success'
-                : 'active'
-            }
-          />
-          <Typography.Text type="secondary">
-            {submissionError ||
-              documentActionError ||
-              currentTaskMessage ||
-              getConnectionLabel(connectionMode, Boolean(task))}
-          </Typography.Text>
-        </div>
-        <div className={styles.taskActions}>
-          {task && CANCELLABLE_TASK_STATUSES.has(task.status) ? (
-            <Tooltip title="取消任务">
-              <Button
-                icon={<StopOutlined />}
-                onClick={() => void handleCancel()}
-              >
-                取消
-              </Button>
-            </Tooltip>
-          ) : null}
-          {task && ['failed', 'canceled', 'expired'].includes(task.status) ? (
-            <Button
-              icon={<ReloadOutlined />}
-              onClick={() => void handleRetry()}
-            >
-              重试
-            </Button>
-          ) : null}
-        </div>
-      </footer>
     </main>
   );
 };
