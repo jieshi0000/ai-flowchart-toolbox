@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 from pydantic import ValidationError
 
 from app.providers.base import ModelProvider, ProviderPollResult, ProviderSubmission
+from app.providers.generation_prompt import build_generation_prompt
 from app.providers.transport import HttpxTransport, ProviderResponseError, ProviderTransportError
 from app.schemas.diagram import DiagramDocument, DiagramGenerationResult
 from app.schemas.provider import (
@@ -38,6 +39,7 @@ _SYSTEM_PROMPT = (
     "之间选择 direction。mermaidSource 必须与 JSON 表达相同流程，第一行严格为 flowchart TB 或 flowchart LR；"
     "按 nodes 数组顺序使用 n0、n1 等别名，每个节点和连线单独一行，连线标签只能写成 -->|文本|；"
     "禁止 HTML、注释、初始化指令、click、style、class、link 或其他交互、样式和外部引用语法。"
+    "如果用户提供了生成粒度或配色约束，必须严格遵守这些约束。"
 )
 _JSON_CODE_BLOCK_RE = re.compile(
     r"\A\s*```(?:json)?\s*(\{.*\})\s*```\s*\Z",
@@ -147,18 +149,11 @@ class AnthropicMessagesProvider(ModelProvider):
         if len(prompt) > 4000:
             raise ProviderResponseError("描述超过当前长度限制，请精简后重试", code="PROMPT_TOO_LONG")
 
-        direction = request.get("direction")
-        if direction == "AUTO":
-            direction_note = "\n\n请自行判断最适合的流程图方向，并在 direction 和 mermaidSource 中使用同一个 TB 或 LR。"
-        elif direction in {"TB", "LR"}:
-            direction_note = f"\n\n流程图方向必须是 {direction}。"
-        else:
-            direction_note = ""
         return {
             "model": self.config.model,
             "max_tokens": self.config.max_output_tokens,
             "system": _SYSTEM_PROMPT,
-            "messages": [{"role": "user", "content": f"{prompt}{direction_note}"}],
+            "messages": [{"role": "user", "content": build_generation_prompt(request)}],
             "tools": [
                 {
                     "name": DIAGRAM_TOOL_NAME,

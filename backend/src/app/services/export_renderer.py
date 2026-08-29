@@ -1,8 +1,8 @@
 """受控的 SVG/PNG 流程图渲染器。
 
 渲染输入来自已经通过 ``DiagramDocument`` 校验的 JSON，而不是客户端提供的
-HTML 或脚本。SVG 由服务端生成语义图形，再交给 Chromium 负责字体加载和
-PNG 截图；这样 Worker 不需要访问外部网络，也不会执行模型返回的代码。
+HTML 或脚本。Worker 使用本地固定版本的 Mermaid.js 在 Chromium 中生成 SVG，
+再从同一个 SVG 截取 PNG；这样预览和导出的布局算法保持一致，也不会访问外部网络。
 """
 
 from __future__ import annotations
@@ -17,12 +17,13 @@ from collections.abc import Mapping
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Protocol
+from uuid import uuid4
 from xml.etree import ElementTree
 
 from app.core.config import get_settings
 from app.schemas.diagram import DiagramDocument, DiagramNode, DiagramNodeType
 from app.schemas.export import ExportBackground, ExportFormat
-from app.services.diagram_service import validate_diagram_document
+from app.services.diagram_service import compile_mermaid, validate_diagram_document
 
 
 RENDER_TIMEOUT_MS = 30_000
@@ -34,6 +35,38 @@ _NODE_GAP_Y = 72
 _PADDING = 36
 _FONT_FAMILY = "Inter, 'Source Han Sans SC', sans-serif"
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+_MERMAID_BUNDLE_ENV = "FLOWCHART_MERMAID_BUNDLE_PATH"
+_MERMAID_BUNDLE_DEFAULT = "/app/assets/mermaid.min.js"
+_MERMAID_THEME_VARIABLES: dict[str, dict[str, str]] = {
+    "blue": {
+        "primaryColor": "#EEF5FF",
+        "primaryBorderColor": "#8EB8FF",
+        "primaryTextColor": "#24549E",
+        "lineColor": "#7A8CA8",
+        "secondaryColor": "#EEF7FB",
+        "tertiaryColor": "#F3F0FF",
+    },
+    "purple": {
+        "primaryColor": "#F5F1FF",
+        "primaryBorderColor": "#B7A8F0",
+        "primaryTextColor": "#5B4A9B",
+        "lineColor": "#8175A8",
+        "secondaryColor": "#F1F4FF",
+        "tertiaryColor": "#F7EFFF",
+    },
+    "green": {
+        "primaryColor": "#EDFBF5",
+        "primaryBorderColor": "#8ED3B6",
+        "primaryTextColor": "#27765D",
+        "lineColor": "#6D9C8A",
+        "secondaryColor": "#EEFAF8",
+        "tertiaryColor": "#F0F8F4",
+    },
+}
+_SAFE_STYLE_FORBIDDEN_RE = re.compile(
+    r"(?:@import|expression\s*\(|(?:java|vb)script\s*:|data\s*:|<|>|`)",
+    re.IGNORECASE,
+)
 _ACTIVE_SVG_TAGS = {
     "a",
     "audio",
@@ -58,6 +91,41 @@ _ACTIVE_SVG_TAGS = {
     "video",
     "view",
 }
+
+
+def _mermaid_bundle_path() -> Path | None:
+    configured = os.getenv(_MERMAID_BUNDLE_ENV, "").strip()
+    repository_bundle = (
+        Path(__file__).resolve().parents[4]
+        / "frontend"
+        / "node_modules"
+        / "mermaid"
+        / "dist"
+        / "mermaid.min.js"
+    )
+    candidates = [Path(configured)] if configured else []
+    candidates.extend([Path(_MERMAID_BUNDLE_DEFAULT), repository_bundle])
+    for candidate in candidates:
+        if candidate.is_file():
+            return candidate
+    return None
+
+
+def _mermaid_source_from_snapshot(
+    snapshot: Mapping[str, Any], document: DiagramDocument
+) -> str:
+    """Use the persisted source only when it is exactly the current graph source."""
+
+    canonical_source = compile_mermaid(document)
+    persisted_source = snapshot.get("mermaidSource") or snapshot.get("mermaid_source")
+    if isinstance(persisted_source, str) and persisted_source.strip() == canonical_source:
+        return persisted_source.strip()
+    return canonical_source
+
+
+def _mermaid_theme_variables(document: DiagramDocument) -> dict[str, str]:
+    theme = str(document.metadata.theme or "blue").lower()
+    return dict(_MERMAID_THEME_VARIABLES.get(theme, _MERMAID_THEME_VARIABLES["blue"]))
 
 
 class ExportRenderError(RuntimeError):
@@ -216,6 +284,41 @@ def _html_for_svg(svg: str, background: ExportBackground) -> str:
     )
 
 
+def _html_for_mermaid(background: ExportBackground) -> str:
+    background_css = "transparent" if background is ExportBackground.TRANSPARENT else "#FFFFFF"
+    return (
+        "<!doctype html><html><head><meta charset=\"utf-8\"><style>"
+        f"html,body{{margin:0;padding:0;background:{background_css};}}"
+        "#flowchart-mermaid-mount{display:block;width:100%;}"
+        "svg{display:block;}"
+        "</style></head><body><div id=\"flowchart-mermaid-mount\"></div></body></html>"
+    )
+
+
+_MERMAID_RENDER_SCRIPT = """
+async ({source, renderId, themeVariables}) => {
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: 'strict',
+    theme: 'base',
+    themeVariables,
+    flowchart: {
+      htmlLabels: false,
+      useMaxWidth: true,
+      curve: 'basis',
+    },
+  });
+  const { svg } = await mermaid.render(renderId, source);
+  const mount = document.getElementById('flowchart-mermaid-mount');
+  if (!mount) {
+    return false;
+  }
+  mount.innerHTML = svg;
+  return Boolean(mount.querySelector('svg'));
+}
+"""
+
+
 def _svg_dimensions(svg: str) -> tuple[int, int]:
     width_match = re.search(r'\bwidth="(\d+)"', svg)
     height_match = re.search(r'\bheight="(\d+)"', svg)
@@ -264,13 +367,21 @@ class ChromiumExportRenderer:
         if export_format not in {ExportFormat.SVG, ExportFormat.PNG}:
             raise ValueError("Chromium 仅支持 SVG 和 PNG")
         document = _document_from_snapshot(snapshot)
-        svg = build_diagram_svg(document)
+        mermaid_source = _mermaid_source_from_snapshot(snapshot, document)
+        theme_variables = _mermaid_theme_variables(document)
         settings = get_settings().export
         # D14 契约是硬性的 30 秒上限；配置只能缩短，不能放宽该上限。
         timeout_ms = min(settings.render_timeout_ms or RENDER_TIMEOUT_MS, RENDER_TIMEOUT_MS)
         try:
             return await asyncio.wait_for(
-                self._render_with_browser(svg, export_format, background, settings, timeout_ms),
+                self._render_with_browser(
+                    mermaid_source,
+                    export_format,
+                    background,
+                    settings,
+                    timeout_ms,
+                    theme_variables=theme_variables,
+                ),
                 timeout=timeout_ms / 1000,
             )
         except asyncio.TimeoutError as exc:
@@ -282,18 +393,19 @@ class ChromiumExportRenderer:
 
     async def _render_with_browser(
         self,
-        svg: str,
+        mermaid_source: str,
         export_format: ExportFormat,
         background: ExportBackground,
         settings: Any,
         timeout_ms: int,
+        *,
+        theme_variables: Mapping[str, str] | None = None,
     ) -> bytes:
         try:
             from playwright.async_api import async_playwright
         except ImportError as exc:
             raise ExportRenderError("导出 Worker 未安装 Chromium 运行时") from exc
 
-        width, height = _svg_dimensions(svg)
         temp_root = settings.temp_dir.strip() if isinstance(settings.temp_dir, str) else ""
         if temp_root:
             Path(temp_root).mkdir(parents=True, exist_ok=True)
@@ -301,7 +413,10 @@ class ChromiumExportRenderer:
         playwright = browser = context = page = None
         try:
             html_path = Path(temp_dir) / "diagram.html"
-            html_path.write_text(_html_for_svg(svg, background), encoding="utf-8")
+            bundle_path = _mermaid_bundle_path()
+            if bundle_path is None:
+                raise ExportRenderError("导出 Worker 未安装 Mermaid 渲染资源")
+            html_path.write_text(_html_for_mermaid(background), encoding="utf-8")
             playwright = await async_playwright().start()
             launch_kwargs: dict[str, Any] = {"headless": True}
             executable = _chromium_path(settings.chromium_path)
@@ -311,7 +426,9 @@ class ChromiumExportRenderer:
                 launch_kwargs["args"] = ["--no-sandbox", "--disable-dev-shm-usage"]
             browser = await playwright.chromium.launch(**launch_kwargs)
             context = await browser.new_context(
-                viewport={"width": width, "height": height},
+                # Mermaid 的 SVG 使用 viewBox 和 max-width；给它一个足够大的
+                # 画布，截图时由 locator 取 SVG 的完整边界，避免分支被裁剪。
+                viewport={"width": MAX_RENDER_DIMENSION, "height": MAX_RENDER_DIMENSION},
                 device_scale_factor=1,
             )
             page = await context.new_page()
@@ -320,10 +437,35 @@ class ChromiumExportRenderer:
                 wait_until="load",
                 timeout=timeout_ms,
             )
+            await page.add_script_tag(path=str(bundle_path))
+            rendered = await page.evaluate(
+                _MERMAID_RENDER_SCRIPT,
+                {
+                    "source": mermaid_source,
+                    "renderId": f"flowchart-export-{uuid4().hex}",
+                    "themeVariables": dict(theme_variables or _MERMAID_THEME_VARIABLES["blue"]),
+                },
+            )
+            if not rendered:
+                raise ExportRenderError("Mermaid 未生成 SVG")
             await page.evaluate("document.fonts ? document.fonts.ready : Promise.resolve()")
             svg_locator = page.locator("svg").first
             if export_format is ExportFormat.SVG:
-                rendered = await svg_locator.evaluate("element => element.outerHTML")
+                rendered = await svg_locator.evaluate(
+                    """
+                    element => {
+                      const values = (element.getAttribute('viewBox') || '')
+                        .trim()
+                        .split(/\\s+/)
+                        .map(Number);
+                      if (values.length === 4 && values[2] > 0 && values[3] > 0) {
+                        element.setAttribute('width', String(values[2]));
+                        element.setAttribute('height', String(values[3]));
+                      }
+                      return element.outerHTML;
+                    }
+                    """
+                )
                 return str(rendered).encode("utf-8")
             return await svg_locator.screenshot(
                 type="png",
@@ -377,16 +519,39 @@ def is_valid_rendered_content(export_format: ExportFormat, content: bytes) -> bo
             return False
         if root.tag.rsplit("}", 1)[-1].lower() != "svg":
             return False
+        parents = {
+            child: parent
+            for parent in root.iter()
+            for child in parent
+        }
         for element in root.iter():
             local_name = element.tag.rsplit("}", 1)[-1].lower()
-            if local_name in _ACTIVE_SVG_TAGS:
+            if local_name == "foreignobject":
+                if not _is_safe_mermaid_foreign_object(element):
+                    return False
+            elif local_name in {"div", "span", "p"}:
+                if not _inside_foreign_object(element, parents):
+                    return False
+                if not element.tag.startswith("{http://www.w3.org/1999/xhtml}"):
+                    return False
+                if any(
+                    attribute.rsplit("}", 1)[-1].rsplit(":", 1)[-1].lower()
+                    not in {"class", "style"}
+                    for attribute in element.attrib
+                ):
+                    return False
+            elif local_name == "style":
+                if not _is_safe_style_value(element.text or ""):
+                    return False
+            elif local_name in _ACTIVE_SVG_TAGS:
                 return False
             for attribute, value in element.attrib.items():
                 attribute_name = attribute.rsplit("}", 1)[-1].rsplit(":", 1)[-1].lower()
                 if attribute_name.startswith("on"):
                     return False
                 if attribute_name == "style":
-                    return False
+                    if not _is_safe_style_value(value):
+                        return False
                 normalized_value = value.strip()
                 lowered_value = normalized_value.lower()
                 if (
@@ -403,6 +568,46 @@ def is_valid_rendered_content(export_format: ExportFormat, content: bytes) -> bo
     if export_format is ExportFormat.PNG:
         return content.startswith(_PNG_SIGNATURE)
     return False
+
+
+def _is_safe_style_value(value: str) -> bool:
+    if "\x00" in value or _SAFE_STYLE_FORBIDDEN_RE.search(value):
+        return False
+    return all(
+        not reference.strip() or reference.strip().startswith("#")
+        for reference in re.findall(r"url\(([^)]*)\)", value, flags=re.IGNORECASE)
+    )
+
+
+def _inside_foreign_object(
+    element: ElementTree.Element,
+    parents: Mapping[ElementTree.Element, ElementTree.Element],
+) -> bool:
+    parent = parents.get(element)
+    while parent is not None:
+        if parent.tag.rsplit("}", 1)[-1].lower() == "foreignobject":
+            return True
+        parent = parents.get(parent)
+    return False
+
+
+def _is_safe_mermaid_foreign_object(element: ElementTree.Element) -> bool:
+    allowed_tags = {"div", "span", "p"}
+    for child in element.iter():
+        if child is element:
+            continue
+        local_name = child.tag.rsplit("}", 1)[-1].lower()
+        if local_name not in allowed_tags:
+            return False
+        if not child.tag.startswith("{http://www.w3.org/1999/xhtml}"):
+            return False
+        for attribute, value in child.attrib.items():
+            attribute_name = attribute.rsplit("}", 1)[-1].rsplit(":", 1)[-1].lower()
+            if attribute_name not in {"class", "style"}:
+                return False
+            if attribute_name == "style" and not _is_safe_style_value(value):
+                return False
+    return True
 
 
 __all__ = [

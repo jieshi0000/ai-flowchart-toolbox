@@ -3,7 +3,7 @@ from __future__ import annotations
 import math
 import re
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import ConfigDict, Field, field_validator, model_validator
 
@@ -120,6 +120,7 @@ class DiagramMetadata(DiagramSchema):
     generated_by: str | None = Field(default=None, max_length=80)
     model: str | None = Field(default=None, max_length=160)
     source_task_id: str | None = Field(default=None, max_length=64)
+    theme: Literal["blue", "purple", "green"] | None = None
     version: int = Field(default=1, ge=1)
 
 

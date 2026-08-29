@@ -242,6 +242,28 @@ async def test_retry_creates_new_task_with_new_idempotency_key_and_source_snapsh
 
 
 @pytest.mark.asyncio
+async def test_retry_preserves_deep_thinking_switch_from_source_snapshot():
+    source = _task(
+        status="failed",
+        request_snapshot={
+            "type": "diagram_generate",
+            "prompt": "请假申请审批流程",
+            "direction": "TB",
+            "detail_level": "standard",
+            "diagram_theme": "blue",
+            "thinking_enabled": True,
+            "provider_id": None,
+            "model": None,
+        },
+    )
+    session = FakeSession(source, None)
+
+    await task_service.retry_task(session, "user-a", source.id, registry=_registry())
+
+    assert session.added[0].request_snapshot["thinking_enabled"] is True
+
+
+@pytest.mark.asyncio
 async def test_create_task_maps_provider_selection_error_to_business_error_code():
     session = FakeSession(None)
     registry = _registry()

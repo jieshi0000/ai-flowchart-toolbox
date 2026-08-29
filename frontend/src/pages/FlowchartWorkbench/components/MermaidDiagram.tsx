@@ -7,23 +7,44 @@ interface MermaidDiagramProps {
   source: string | null;
   status: MermaidPreviewStatus;
   error: string | null;
+  theme?: 'blue' | 'purple' | 'green';
 }
 
 let renderSequence = 0;
 let mermaidModulePromise: ReturnType<typeof loadMermaidModule> | null = null;
 
+const MERMAID_THEME_VARIABLES: Record<
+  'blue' | 'purple' | 'green',
+  Record<string, string>
+> = {
+  blue: {
+    primaryColor: '#EEF5FF',
+    primaryBorderColor: '#8EB8FF',
+    primaryTextColor: '#24549E',
+    lineColor: '#7A8CA8',
+    secondaryColor: '#EEF7FB',
+    tertiaryColor: '#F3F0FF',
+  },
+  purple: {
+    primaryColor: '#F5F1FF',
+    primaryBorderColor: '#B7A8F0',
+    primaryTextColor: '#5B4A9B',
+    lineColor: '#8175A8',
+    secondaryColor: '#F1F4FF',
+    tertiaryColor: '#F7EFFF',
+  },
+  green: {
+    primaryColor: '#EDFBF5',
+    primaryBorderColor: '#8ED3B6',
+    primaryTextColor: '#27765D',
+    lineColor: '#6D9C8A',
+    secondaryColor: '#EEFAF8',
+    tertiaryColor: '#F0F8F4',
+  },
+};
+
 async function loadMermaidModule() {
   const { default: mermaid } = await import('mermaid');
-  mermaid.initialize({
-    startOnLoad: false,
-    securityLevel: 'strict',
-    theme: 'base',
-    flowchart: {
-      htmlLabels: false,
-      useMaxWidth: true,
-      curve: 'basis',
-    },
-  });
   return mermaid;
 }
 
@@ -34,9 +55,13 @@ function getMermaidModule() {
   return mermaidModulePromise;
 }
 
-export function MermaidDiagram({ source, status, error }: MermaidDiagramProps) {
+export function MermaidDiagram({
+  source,
+  status,
+  error,
+  theme = 'blue',
+}: MermaidDiagramProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const renderIdRef = useRef(`flowchart-mermaid-${++renderSequence}`);
   const [renderError, setRenderError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -52,8 +77,22 @@ export function MermaidDiagram({ source, status, error }: MermaidDiagramProps) {
       };
     }
 
+    const renderId = `flowchart-mermaid-${++renderSequence}`;
     void getMermaidModule()
-      .then((mermaid) => mermaid.render(renderIdRef.current, source))
+      .then((mermaid) => {
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: 'strict',
+          theme: 'base',
+          themeVariables: MERMAID_THEME_VARIABLES[theme],
+          flowchart: {
+            htmlLabels: false,
+            useMaxWidth: true,
+            curve: 'basis',
+          },
+        });
+        return mermaid.render(renderId, source);
+      })
       .then(({ svg }) => {
         if (disposed || !containerRef.current) {
           return;
@@ -71,7 +110,7 @@ export function MermaidDiagram({ source, status, error }: MermaidDiagramProps) {
     return () => {
       disposed = true;
     };
-  }, [source]);
+  }, [source, theme]);
 
   if (!source?.trim()) {
     return (

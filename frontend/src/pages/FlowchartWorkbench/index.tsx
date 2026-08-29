@@ -36,6 +36,7 @@ import {
 } from '@/services/flowchart/taskStorage';
 import {
   FlowchartProvider,
+  type FlowchartDiagramTheme,
   getFlowchartProviders,
   getFlowchartTemplates,
 } from '@/services/flowchart/workbench';
@@ -69,6 +70,7 @@ import {
   Segmented,
   Select,
   Spin,
+  Switch,
   Tooltip,
   Typography,
 } from 'antd';
@@ -94,7 +96,7 @@ interface RequestFailure {
   message?: string | null;
 }
 
-type DiagramTheme = 'blue' | 'purple' | 'green';
+type DiagramTheme = FlowchartDiagramTheme;
 const DIAGRAM_THEME_STYLES: Record<DiagramTheme, Record<DiagramNode['type'], { fill: string; stroke: string }>> = {
   blue: {
     start: { fill: '#eef5ff', stroke: '#8eb8ff' }, end: { fill: '#edf3ff', stroke: '#8eb8ff' }, process: { fill: '#eef5ff', stroke: '#b9d2ff' }, decision: { fill: '#fff8e7', stroke: '#e9c77a' }, input_output: { fill: '#eef7fb', stroke: '#9ccfe5' }, subprocess: { fill: '#f3f0ff', stroke: '#c8baf5' },
@@ -367,6 +369,9 @@ const FlowchartWorkbench: React.FC = () => {
   const prompt = useFlowchartWorkbenchStore((state) => state.prompt);
   const direction = useFlowchartWorkbenchStore((state) => state.direction);
   const detailLevel = useFlowchartWorkbenchStore((state) => state.detailLevel);
+  const thinkingEnabled = useFlowchartWorkbenchStore(
+    (state) => state.thinkingEnabled,
+  );
   const selectedModel = useFlowchartWorkbenchStore(
     (state) => state.selectedModel,
   );
@@ -408,6 +413,9 @@ const FlowchartWorkbench: React.FC = () => {
   );
   const setDetailLevel = useFlowchartWorkbenchStore(
     (state) => state.setDetailLevel,
+  );
+  const setThinkingEnabled = useFlowchartWorkbenchStore(
+    (state) => state.setThinkingEnabled,
   );
   const setSelectedModel = useFlowchartWorkbenchStore(
     (state) => state.setSelectedModel,
@@ -519,7 +527,11 @@ const FlowchartWorkbench: React.FC = () => {
 
   const applyDocument = useCallback(
     (document: FlowchartDocument) => {
-      setDiagramData(applyDiagramTheme(diagramDataFromDocument(document), diagramTheme));
+      const documentTheme = document.metadata.theme || diagramTheme;
+      setDiagramTheme(documentTheme);
+      setDiagramData(
+        applyDiagramTheme(diagramDataFromDocument(document), documentTheme),
+      );
       markDiagramSaved();
       setDirection(document.direction);
       setDocumentVersion(document.metadata.version);
@@ -752,6 +764,8 @@ const FlowchartWorkbench: React.FC = () => {
         prompt: prompt.trim(),
         direction: 'AUTO',
         detailLevel,
+        diagramTheme,
+        thinkingEnabled,
         providerId: null,
         model: selectedModel === AUTO_ROUTE_MODEL ? null : selectedModel,
         sessionId: getOrCreateFlowchartSessionId(),
@@ -1298,6 +1312,7 @@ const FlowchartWorkbench: React.FC = () => {
                   source={mermaidSource}
                   status={mermaidStatus}
                   error={mermaidError}
+                  theme={diagramTheme}
                 />
                 <div className={styles.generatedPreviewActions}>
                   <CheckCircleFilled aria-hidden="true" />
@@ -1358,9 +1373,22 @@ const FlowchartWorkbench: React.FC = () => {
                 <Input.TextArea id="flowchart-prompt" value={prompt} maxLength={4000} autoSize={{ minRows: 5, maxRows: 8 }} placeholder="例如：生成一个电商订单从用户下单、支付、仓库发货到售后评价的完整流程图" onChange={(event) => setPrompt(event.target.value)} />
                 <div className={styles.formGrid}>
                   <Select value={direction} options={[{ value: 'LR', label: '横向布局' }, { value: 'TB', label: '纵向布局' }]} onChange={(value) => setDirection(value as 'LR' | 'TB')} />
-                  <Select value={detailLevel} options={[{ value: 'concise', label: '简洁' }, { value: 'standard', label: '标准' }, { value: 'detailed', label: '详细' }]} onChange={(value) => setDetailLevel(value as 'concise' | 'standard' | 'detailed')} />
+                  <Select value={detailLevel} options={[{ value: 'concise', label: '简要' }, { value: 'standard', label: '标准' }, { value: 'detailed', label: '详细' }]} onChange={(value) => setDetailLevel(value as 'concise' | 'standard' | 'detailed')} />
                   <Select value={selectedModel} loading={providerLoadState === 'loading'} disabled={hasNoAvailableModel} options={modelOptions} onChange={setSelectedModel} />
-                  <Select value={diagramTheme} options={[{ value: 'blue', label: '商务蓝' }, { value: 'purple', label: '科技紫' }, { value: 'green', label: '清新绿' }]} onChange={(value) => { const nextTheme = value as DiagramTheme; setDiagramTheme(nextTheme); setDiagramData((current) => applyDiagramTheme(current, nextTheme)); }} />
+                  <Select value={diagramTheme} options={[{ value: 'blue', label: '商务蓝' }, { value: 'purple', label: '科技紫' }, { value: 'green', label: '清新绿' }]} onChange={(value) => { const nextTheme = value as DiagramTheme; setDiagramTheme(nextTheme); if (diagramData.id || diagramData.nodes.length) { setDiagramData((current) => applyDiagramTheme(current, nextTheme)); } }} />
+                </div>
+                <div className={styles.thinkingOption}>
+                  <div className={styles.thinkingCopy}>
+                    <span className={styles.thinkingTitle}>深度思考</span>
+                    <Typography.Text type="secondary">
+                      默认关闭，开启后模型会进行更深入分析
+                    </Typography.Text>
+                  </div>
+                  <Switch
+                    checked={thinkingEnabled}
+                    aria-label="深度思考"
+                    onChange={setThinkingEnabled}
+                  />
                 </div>
                 <Button className={styles.generateButton} type="primary" icon={<SendOutlined />} loading={isCreating} disabled={!canGenerate} onClick={() => void handleGenerate()}>生成流程图</Button>
               </section>

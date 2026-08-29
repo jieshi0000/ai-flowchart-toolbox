@@ -318,6 +318,11 @@ async def retry_task(
             prompt=snapshot["prompt"],
             direction=snapshot.get("direction", "TB"),
             detail_level=snapshot.get("detail_level", "standard"),
+            diagram_theme=snapshot.get("diagram_theme", "blue"),
+            thinking_enabled=snapshot.get(
+                "thinking_enabled",
+                snapshot.get("thinkingEnabled", snapshot.get("deepThinking", False)),
+            ),
             provider_id=snapshot.get("provider_id"),
             model=snapshot.get("model"),
             session_id=snapshot.get("session_id") or source_task.session_id,

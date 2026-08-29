@@ -133,7 +133,9 @@ export function useTaskMonitor({
             signal: sseAbortController.signal,
             headers: {
               Accept: 'text/event-stream',
-              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              ...(token
+                ? { Authorization: `Bearer ${token}` }
+                : { 'X-Flowchart-User-Id': 'local-user' }),
             },
           },
         );

@@ -1,6 +1,4 @@
 // 运行时配置
-import { getMe, getPublicConfig } from '@/services/demo/auth';
-import { history } from '@umijs/max';
 import { message } from 'antd';
 
 function providerErrorMessage(errorCode: unknown): string | undefined {
@@ -32,43 +30,8 @@ export async function getInitialState(): Promise<{
   authEnabled?: boolean;
   ssoEnabled?: boolean;
 }> {
-  const { pathname } = history.location;
-
-  // 登录页：获取公开配置（验证码开关等），不获取用户信息
-  if (pathname === '/login') {
-    try {
-      const cfg = await getPublicConfig();
-      if (cfg.code === 200) {
-        return {
-          captchaEnabled: cfg.data.captchaEnabled,
-          authEnabled: cfg.data.authEnabled,
-          ssoEnabled: cfg.data.ssoEnabled,
-        };
-      }
-    } catch {
-      // 公开配置获取失败，使用默认值
-    }
-    return {};
-  }
-
-  // 非登录页：获取用户信息
-  try {
-    const res = await getMe();
-    if (res.code === 200) {
-      return {
-        currentUser: res.data,
-      };
-    }
-    // code=401 说明未登录或 token 过期
-    localStorage.removeItem('token');
-    history.push('/login');
-    return {};
-  } catch {
-    // 网络错误等，清除 token 跳登录页
-    localStorage.removeItem('token');
-    history.push('/login');
-    return {};
-  }
+  // 工作台无需登录；若由应用广场嵌入，认证头仍由请求拦截器透传。
+  return {};
 }
 
 // request 全局错误处理
@@ -76,12 +39,12 @@ export const request = {
   requestInterceptors: [
     (config: any) => {
       const token = localStorage.getItem('token');
-      if (token) {
-        config.headers = {
-          ...config.headers,
-          Authorization: `Bearer ${token}`,
-        };
-      }
+      config.headers = {
+        ...config.headers,
+        ...(token
+          ? { Authorization: `Bearer ${token}` }
+          : { 'X-Flowchart-User-Id': 'local-user' }),
+      };
       return config;
     },
   ],
@@ -109,20 +72,17 @@ export const request = {
         throw error;
       }
 
-      // 401 未认证：后端返回 HTTP 200 + body.code=401
+      // 工作台不再跳转登录页；认证由宿主环境或后端本地模式决定。
       if (errorCode === 401) {
-        message.error('登录已过期，请重新登录');
+        message.error(data?.message || '当前请求未授权，请检查服务端认证配置');
         localStorage.removeItem('token');
-        if (history.location.pathname !== '/login') {
-          history.push('/login');
-        }
-        return;
+        throw error;
       }
 
       // 403 无权限
       if (errorCode === 403) {
-        history.push('/401');
-        return;
+        message.error(data?.message || '当前用户没有权限执行此操作');
+        throw error;
       }
 
       // 500 服务器错误

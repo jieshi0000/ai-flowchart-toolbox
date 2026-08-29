@@ -11,11 +11,6 @@ export default defineConfig({
   },
   routes: [
     {
-      path: '/login',
-      layout: false,
-      component: './Login',
-    },
-    {
       path: '/401',
       layout: false,
       component: './401',

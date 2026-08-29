@@ -20,6 +20,7 @@ from app.providers.openai_chat import (
     _openai_strict_schema,
     _validate_diagram_payload,
 )
+from app.providers.generation_prompt import build_generation_prompt, is_thinking_enabled
 from app.providers.transport import HttpxTransport, ProviderResponseError, ProviderTransportError
 from app.schemas.diagram import DiagramDocument, DiagramGenerationResult
 from app.schemas.provider import (
@@ -156,17 +157,10 @@ class OpenAIResponsesProvider(ModelProvider):
         if len(prompt) > 4000:
             raise ProviderResponseError("描述超过当前长度限制，请精简后重试", code="PROMPT_TOO_LONG")
 
-        direction = request.get("direction")
-        if direction == "AUTO":
-            direction_note = "\n\n请自行判断最适合的流程图方向，并在 direction 和 mermaidSource 中使用同一个 TB 或 LR。"
-        elif direction in {"TB", "LR"}:
-            direction_note = f"\n\n流程图方向必须是 {direction}。"
-        else:
-            direction_note = ""
         payload: dict[str, Any] = {
             "model": self.config.model,
             "instructions": _SYSTEM_PROMPT,
-            "input": f"{prompt}{direction_note}",
+            "input": build_generation_prompt(request),
             "max_output_tokens": self.config.max_output_tokens,
             "stream": False,
         }
@@ -174,6 +168,10 @@ class OpenAIResponsesProvider(ModelProvider):
         # 依靠固定 instructions 和后端 Schema 校验兜底。
         if self._supports_structured_output():
             payload["text"] = {"format": self._response_format()}
+        # DeepSeek Responses 默认开启高强度思考；关闭后把输出预算留给
+        # 流程图 JSON。该字段是 DeepSeek 专属语义，不发送给其他兼容端点。
+        if urlsplit(self.config.base_url).hostname == "api.deepseek.com":
+            payload["reasoning"] = {"effort": "high" if is_thinking_enabled(request) else "none"}
         return payload
 
     def _parse_response(self, response: Any, *, request_id: str | None) -> DiagramDocument:
