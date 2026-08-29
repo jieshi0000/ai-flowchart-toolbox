@@ -113,11 +113,42 @@ async def test_responses_supports_deepseek_openai_and_relay_payloads(base_url, e
     assert payload["text"]["format"]["type"] == "json_schema"
     assert payload["text"]["format"]["name"] == "diagram_document"
     assert payload["text"]["format"]["strict"] is True
-    assert set(payload) == {"model", "instructions", "input", "max_output_tokens", "stream", "text"}
+    if base_url == "https://api.deepseek.com":
+        assert payload["reasoning"] == {"effort": "none"}
+        assert set(payload) == {
+            "model",
+            "instructions",
+            "input",
+            "max_output_tokens",
+            "stream",
+            "text",
+            "reasoning",
+        }
+    else:
+        assert "reasoning" not in payload
+        assert set(payload) == {"model", "instructions", "input", "max_output_tokens", "stream", "text"}
     assert submission.provider_request_id == "resp_test_123"
     assert submission.mode == "sync"
     assert submission.status == "succeeded"
     assert submission.result["mermaidSource"].startswith("flowchart TB")
+
+
+def test_responses_maps_deep_thinking_switch_for_deepseek_only():
+    provider = OpenAIResponsesProvider(
+        _responses_config(),
+        key_lookup={"DEEPSEEK_TEST_KEY": "test-key"}.get,
+    )
+
+    assert provider._build_request_payload({"prompt": "生成流程"})["reasoning"] == {"effort": "none"}
+    assert provider._build_request_payload({"prompt": "生成流程", "deepThinking": True})["reasoning"] == {
+        "effort": "high"
+    }
+
+    relay = OpenAIResponsesProvider(
+        _responses_config(baseUrl="https://relay.example/v1"),
+        key_lookup={"DEEPSEEK_TEST_KEY": "test-key"}.get,
+    )
+    assert "reasoning" not in relay._build_request_payload({"prompt": "生成流程", "deepThinking": True})
 
 
 @pytest.mark.asyncio

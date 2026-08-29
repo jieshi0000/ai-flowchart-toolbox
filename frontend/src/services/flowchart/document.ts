@@ -1,7 +1,7 @@
 import type { DiagramEdge, DiagramNode } from '@/models/flowchart';
 import { request } from '@umijs/max';
 import type { FlowchartResult, FlowchartTaskStatus } from './task';
-import type { FlowchartDirection } from './workbench';
+import type { FlowchartDiagramTheme, FlowchartDirection } from './workbench';
 
 export type MermaidCompilationStatus =
   | 'idle'
@@ -28,6 +28,7 @@ export interface FlowchartDocument {
     generatedBy?: string | null;
     model?: string | null;
     sourceTaskId?: string | null;
+    theme?: FlowchartDiagramTheme | null;
   };
   mermaidCompilation: MermaidCompilation;
 }
@@ -144,7 +145,9 @@ export async function downloadFlowchartFile(fileId: string) {
     `/api/flowchart/files/download?fileId=${encodeURIComponent(fileId)}`,
     {
       headers: {
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(token
+          ? { Authorization: `Bearer ${token}` }
+          : { 'X-Flowchart-User-Id': 'local-user' }),
       },
     },
   );

@@ -3,6 +3,7 @@ import type { FlowchartResult } from './task';
 
 export type FlowchartDirection = 'TB' | 'LR';
 export type FlowchartDetailLevel = 'concise' | 'standard' | 'detailed';
+export type FlowchartDiagramTheme = 'blue' | 'purple' | 'green';
 export type ProviderStatus =
   | 'healthy'
   | 'unhealthy'

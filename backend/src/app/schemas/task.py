@@ -2,7 +2,7 @@ import re
 from enum import StrEnum
 from uuid import UUID
 
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 
 from app.schemas.base import CamelVO
 
@@ -51,6 +51,12 @@ class DetailLevel(StrEnum):
     DETAILED = "detailed"
 
 
+class DiagramTheme(StrEnum):
+    BLUE = "blue"
+    PURPLE = "purple"
+    GREEN = "green"
+
+
 class TaskCreateRequest(CamelVO):
     type: TaskType = TaskType.DIAGRAM_GENERATE
     prompt: str = Field(min_length=1, max_length=4000)
@@ -58,6 +64,18 @@ class TaskCreateRequest(CamelVO):
     # TB/LR 继续保留给旧客户端和明确指定方向的 API 调用。
     direction: str = Field(default="AUTO", pattern="^(AUTO|TB|LR)$")
     detail_level: DetailLevel = DetailLevel.STANDARD
+    diagram_theme: DiagramTheme = Field(
+        default=DiagramTheme.BLUE,
+        validation_alias=AliasChoices("diagramTheme", "theme", "diagram_theme"),
+    )
+    thinking_enabled: bool = Field(
+        default=False,
+        validation_alias=AliasChoices(
+            "thinkingEnabled",
+            "deepThinking",
+            "thinking_enabled",
+        ),
+    )
     provider_id: str | None = Field(default=None, max_length=80)
     model: str | None = Field(default=None, max_length=160)
     # 迁移期间允许旧版页面省略；新版工作台必须由浏览器生成并传入 UUID。

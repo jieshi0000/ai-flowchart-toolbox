@@ -8,17 +8,16 @@ export default function Page401() {
       <Result
         status="error"
         title="401"
-        subTitle="抱歉，您没有权限访问此页面。请重新登录。"
+        subTitle="抱歉，您没有权限访问此页面。"
         extra={
           <Button
             type="primary"
             size="large"
             onClick={() => {
-              localStorage.removeItem('token');
-              history.push('/login');
+              history.push('/');
             }}
           >
-            重新登录
+            返回工作台
           </Button>
         }
       />

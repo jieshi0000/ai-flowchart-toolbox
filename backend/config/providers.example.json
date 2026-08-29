@@ -18,7 +18,7 @@
     "pollIntervalSeconds": 3,
     "maxPollIntervalSeconds": 15,
     "taskTimeoutSeconds": 600,
-    "maxOutputTokens": 4096
+    "maxOutputTokens": 16384
   },
   {
     "providerId": "deepseek-official-responses",
@@ -39,6 +39,6 @@
     "pollIntervalSeconds": 3,
     "maxPollIntervalSeconds": 15,
     "taskTimeoutSeconds": 600,
-    "maxOutputTokens": 4096
+    "maxOutputTokens": 16384
   }
 ]

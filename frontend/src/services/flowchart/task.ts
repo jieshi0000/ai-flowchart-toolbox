@@ -1,4 +1,5 @@
 import { request } from '@umijs/max';
+import type { FlowchartDiagramTheme } from './workbench';
 
 export type FlowchartTaskStatus =
   | 'waiting'
@@ -42,6 +43,8 @@ export interface CreateFlowchartTaskRequest {
   prompt: string;
   direction: 'AUTO' | 'TB' | 'LR';
   detailLevel: 'concise' | 'standard' | 'detailed';
+  diagramTheme: FlowchartDiagramTheme;
+  thinkingEnabled: boolean;
   providerId: string | null;
   model: string | null;
   sessionId: string;

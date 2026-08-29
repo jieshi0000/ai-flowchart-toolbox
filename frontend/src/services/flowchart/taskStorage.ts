@@ -69,7 +69,7 @@ export function clearActiveDocumentId(): void {
 }
 
 /**
- * 同一浏览器会话内的关联标识。它只辅助任务恢复，后端仍以登录用户为授权边界。
+ * 同一浏览器会话内的关联标识。它只辅助任务恢复，后端仍以用户标识为边界。
  */
 export function getOrCreateFlowchartSessionId(): string {
   const storage = getSessionStorage();

@@ -21,7 +21,7 @@ docker compose --env-file docker-compose.local.env -f docker-compose.local.yml u
 
 该命令会启动前端、FastAPI、Celery Worker/Beat、PostgreSQL、Redis 与 MinIO，均位于项目内部 Docker 网络。
 
-访问 http://localhost:20105 ，使用本地开发账号登录后进入流程图工作台。健康检查地址为 http://localhost:10105/api/public/health 。
+访问 http://localhost:20105 即可直接进入流程图工作台（本地 Compose 已关闭登录校验）。健康检查地址为 http://localhost:10105/api/public/health 。
 
 ### 2. 本机分别启动（可选）
 

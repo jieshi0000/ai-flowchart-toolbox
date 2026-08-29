@@ -50,6 +50,33 @@ COMPENSATION_LIMIT = 100
 # Worker/消息投递已中断，继续补调度会让用户看到无期限的“处理中”。
 ZOMBIE_SUBMISSION_TIMEOUT = timedelta(hours=1)
 
+_DIAGRAM_THEME_STYLES: dict[str, dict[str, dict[str, str]]] = {
+    "blue": {
+        "start": {"fill": "#EEF5FF", "stroke": "#8EB8FF"},
+        "end": {"fill": "#EDF3FF", "stroke": "#8EB8FF"},
+        "process": {"fill": "#EEF5FF", "stroke": "#B9D2FF"},
+        "decision": {"fill": "#FFF8E7", "stroke": "#E9C77A"},
+        "input_output": {"fill": "#EEF7FB", "stroke": "#9CCFE5"},
+        "subprocess": {"fill": "#F3F0FF", "stroke": "#C8BAF5"},
+    },
+    "purple": {
+        "start": {"fill": "#F3F0FF", "stroke": "#B7A8F0"},
+        "end": {"fill": "#F3F0FF", "stroke": "#B7A8F0"},
+        "process": {"fill": "#F5F1FF", "stroke": "#D3C7FF"},
+        "decision": {"fill": "#FFF8E7", "stroke": "#E9C77A"},
+        "input_output": {"fill": "#F1F4FF", "stroke": "#B8C6F1"},
+        "subprocess": {"fill": "#F7EFFF", "stroke": "#D9BDF5"},
+    },
+    "green": {
+        "start": {"fill": "#EAFAF4", "stroke": "#8ED3B6"},
+        "end": {"fill": "#EAFAF4", "stroke": "#8ED3B6"},
+        "process": {"fill": "#EDFBF5", "stroke": "#B5E3D0"},
+        "decision": {"fill": "#FFF8E7", "stroke": "#E9C77A"},
+        "input_output": {"fill": "#EEFAF8", "stroke": "#9FD8CF"},
+        "subprocess": {"fill": "#F0F8F4", "stroke": "#B8DDC8"},
+    },
+}
+
 TASK_STAGE_DETAILS: dict[TaskStatus, tuple[int, str]] = {
     TaskStatus.WAITING: (5, "任务已创建，等待处理"),
     TaskStatus.SUBMITTING: (15, "正在提交生成请求"),
@@ -777,6 +804,7 @@ class TaskEngine:
                 self._mark_failed(task, code=_TIMEOUT_CODE)
                 cancel_after_commit = bool(task.provider_request_id)
             else:
+                payload = _apply_task_theme(payload, task)
                 payload = _attach_task_metadata(payload, task)
                 document = create_generated_document(task, payload, now=self._now())
                 session.add(document)
@@ -992,6 +1020,38 @@ def _attach_task_metadata(payload: dict[str, Any], task: FlowchartTask) -> dict[
             "sourceTaskId": str(task.id),
         }
     )
+    result["metadata"] = metadata
+    return result
+
+
+def _apply_task_theme(payload: dict[str, Any], task: FlowchartTask) -> dict[str, Any]:
+    """以任务选项覆盖模型样式，保证生成结果使用用户选择的主题。"""
+
+    snapshot = task.request_snapshot if isinstance(task.request_snapshot, Mapping) else {}
+    theme = str(
+        snapshot.get("diagram_theme")
+        or snapshot.get("diagramTheme")
+        or snapshot.get("theme")
+        or "blue"
+    ).lower()
+    palette = _DIAGRAM_THEME_STYLES.get(theme, _DIAGRAM_THEME_STYLES["blue"])
+    result = dict(payload)
+    nodes = result.get("nodes")
+    if isinstance(nodes, list):
+        themed_nodes: list[Any] = []
+        for node in nodes:
+            if not isinstance(node, Mapping):
+                themed_nodes.append(node)
+                continue
+            themed_node = dict(node)
+            node_style = palette.get(str(themed_node.get("type")))
+            if node_style is not None:
+                themed_node["style"] = dict(node_style)
+            themed_nodes.append(themed_node)
+        result["nodes"] = themed_nodes
+
+    metadata = dict(result.get("metadata") or {})
+    metadata["theme"] = theme if theme in _DIAGRAM_THEME_STYLES else "blue"
     result["metadata"] = metadata
     return result
 

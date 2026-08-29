@@ -71,7 +71,8 @@ services:
       APP__JSON_CAMEL_CASE: "true"
       APP__PORT: 8000
       AI__PROVIDERS_FILE: /app/config/providers.local.json
-      AUTH__ENABLED: "true"
+      # 本地工作台无需登录；生产 compose 仍由 backend/.env 独立控制认证。
+      AUTH__ENABLED: "false"
       DATABASE__AUTO_MIGRATE: "true"
       DATABASE__URL: "postgresql://${LOCAL_POSTGRES_USER:?Set LOCAL_POSTGRES_USER in docker-compose.local.env}:${LOCAL_POSTGRES_PASSWORD:?Set LOCAL_POSTGRES_PASSWORD in docker-compose.local.env}@postgres:5432/${LOCAL_POSTGRES_DB:?Set LOCAL_POSTGRES_DB in docker-compose.local.env}"
       DEEPSEEK_API_KEY: "${LOCAL_DEEPSEEK_API_KEY:-}"

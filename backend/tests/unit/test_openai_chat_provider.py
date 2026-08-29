@@ -108,11 +108,33 @@ async def test_openai_chat_reuses_one_adapter_for_deepseek_openai_and_compatible
         )
     else:
         assert seen["payload"]["response_format"] == {"type": "json_object"}
+    if base_url == "https://api.deepseek.com":
+        assert seen["payload"]["thinking"] == {"type": "disabled"}
+    else:
+        assert "thinking" not in seen["payload"]
     assert submission.provider_request_id == "chatcmpl_test_123"
     assert submission.mode == "sync"
     assert submission.status == "succeeded"
     assert submission.result["title"] == "请假审批流程"
     assert submission.result["mermaidSource"].startswith("flowchart TB")
+
+
+def test_openai_chat_maps_deep_thinking_switch_for_deepseek_only():
+    provider = OpenAIChatCompletionsProvider(
+        _openai_chat_config(),
+        key_lookup={"DEEPSEEK_TEST_KEY": "test-key"}.get,
+    )
+
+    assert provider._build_request_payload({"prompt": "生成流程"})["thinking"] == {"type": "disabled"}
+    assert provider._build_request_payload({"prompt": "生成流程", "deepThinking": True})["thinking"] == {
+        "type": "enabled"
+    }
+
+    relay = OpenAIChatCompletionsProvider(
+        _openai_chat_config(baseUrl="https://relay.example/v1"),
+        key_lookup={"DEEPSEEK_TEST_KEY": "test-key"}.get,
+    )
+    assert "thinking" not in relay._build_request_payload({"prompt": "生成流程", "deepThinking": True})
 
 
 @pytest.mark.asyncio

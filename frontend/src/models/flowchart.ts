@@ -107,6 +107,7 @@ export interface FlowchartWorkbenchState {
   prompt: string;
   direction: FlowchartDirection;
   detailLevel: FlowchartDetailLevel;
+  thinkingEnabled: boolean;
   selectedModel: string;
   activeTaskId: string | null;
   task: FlowchartTask | null;
@@ -125,6 +126,7 @@ export interface FlowchartWorkbenchState {
   setPrompt: (prompt: string) => void;
   setDirection: (direction: FlowchartDirection) => void;
   setDetailLevel: (detailLevel: FlowchartDetailLevel) => void;
+  setThinkingEnabled: (thinkingEnabled: boolean) => void;
   setSelectedModel: (selectedModel: string) => void;
   setActiveTaskId: (activeTaskId: string | null) => void;
   setTask: (task: FlowchartTask | null) => void;
@@ -157,6 +159,7 @@ export const useFlowchartWorkbenchStore = create<FlowchartWorkbenchState>()(
       prompt: '',
       direction: 'TB',
       detailLevel: 'standard',
+      thinkingEnabled: false,
       selectedModel: AUTO_ROUTE_MODEL,
       activeTaskId: null,
       task: null,
@@ -175,6 +178,7 @@ export const useFlowchartWorkbenchStore = create<FlowchartWorkbenchState>()(
       setPrompt: (prompt) => set({ prompt }),
       setDirection: (direction) => set({ direction }),
       setDetailLevel: (detailLevel) => set({ detailLevel }),
+      setThinkingEnabled: (thinkingEnabled) => set({ thinkingEnabled }),
       setSelectedModel: (selectedModel) => set({ selectedModel }),
       setActiveTaskId: (activeTaskId) => set({ activeTaskId }),
       setTask: (task) => set({ task }),

@@ -16,6 +16,7 @@ from urllib.parse import urlsplit
 from pydantic import ValidationError
 
 from app.providers.base import ModelProvider, ProviderPollResult, ProviderSubmission
+from app.providers.generation_prompt import build_generation_prompt, is_thinking_enabled
 from app.providers.transport import HttpxTransport, ProviderResponseError, ProviderTransportError
 from app.schemas.diagram import DiagramDocument, DiagramGenerationResult
 from app.schemas.provider import (
@@ -39,6 +40,7 @@ _SYSTEM_PROMPT = (
     "可选 label 或 condition。mermaidSource 必须表达与 JSON 相同的流程，第一行必须严格为 "
     "flowchart TB 或 flowchart LR；按 nodes 数组顺序使用 n0、n1 等别名，每个节点和连线单独一行，"
     "连线标签只能写成 -->|文本|；禁止 HTML、注释、初始化指令、click、style、class、link 或其他交互、样式和外部引用语法。"
+    "如果用户提供了生成粒度或配色约束，必须严格遵守这些约束。"
 )
 _JSON_CODE_BLOCK_RE = re.compile(
     r"\A\s*```(?:json)?\s*(\{.*\})\s*```\s*\Z",
@@ -175,23 +177,22 @@ class OpenAIChatCompletionsProvider(ModelProvider):
         if len(prompt) > 4000:
             raise ProviderResponseError("描述超过当前长度限制，请精简后重试", code="PROMPT_TOO_LONG")
 
-        direction = request.get("direction")
-        if direction == "AUTO":
-            direction_note = "\n\n请自行判断最适合的流程图方向，并在 direction 和 mermaidSource 中使用同一个 TB 或 LR。"
-        elif direction in {"TB", "LR"}:
-            direction_note = f"\n\n流程图方向必须是 {direction}。"
-        else:
-            direction_note = ""
-        return {
+        payload = {
             "model": self.config.model,
             "messages": [
                 {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": f"{prompt}{direction_note}"},
+                {"role": "user", "content": build_generation_prompt(request)},
             ],
             "max_tokens": self.config.max_output_tokens,
             "response_format": self._response_format(),
             "stream": False,
         }
+        # DeepSeek V4 默认开启高强度思考；结构化流程图的输出上限容易被
+        # reasoning_tokens 耗尽，最终没有留下可解析的 JSON。仅对官方端点
+        # 关闭思考，避免把该供应商专属参数发送给 OpenAI 或其他中转站。
+        if urlsplit(self.config.base_url).hostname == "api.deepseek.com":
+            payload["thinking"] = {"type": "enabled" if is_thinking_enabled(request) else "disabled"}
+        return payload
 
     def _parse_response(self, response: Any, *, request_id: str | None) -> DiagramDocument:
         if not isinstance(response, Mapping):

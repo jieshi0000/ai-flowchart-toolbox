@@ -105,6 +105,96 @@ def test_build_diagram_svg_is_script_free_and_keeps_chinese_text():
     assert 'marker-end="url(#flowchart-arrow)"' in svg
 
 
+@pytest.mark.asyncio
+async def test_renderer_uses_canonical_mermaid_source_for_branch_layout(monkeypatch):
+    payload = {
+        "title": "分支回路流程",
+        "direction": "TB",
+        "nodes": [
+            {"id": "start", "type": "start", "label": "开始"},
+            {"id": "decision", "type": "decision", "label": "是否通过"},
+            {"id": "retry", "type": "process", "label": "返回重试"},
+            {"id": "end", "type": "end", "label": "结束"},
+        ],
+        "edges": [
+            {"id": "e1", "source": "start", "target": "decision"},
+            {
+                "id": "e2",
+                "source": "decision",
+                "target": "end",
+                "condition": "是",
+            },
+            {
+                "id": "e3",
+                "source": "decision",
+                "target": "retry",
+                "condition": "否",
+            },
+            {"id": "e4", "source": "retry", "target": "decision"},
+        ],
+        "metadata": {"theme": "purple", "version": 1},
+    }
+    calls: dict[str, object] = {}
+
+    async def fake_render(
+        _self,
+        source,
+        export_format,
+        background,
+        _settings,
+        _timeout_ms,
+        *,
+        theme_variables=None,
+    ):
+        calls.update(
+            {
+                "source": source,
+                "format": export_format,
+                "background": background,
+                "theme": theme_variables,
+            }
+        )
+        return b"rendered"
+
+    monkeypatch.setattr(export_renderer.ChromiumExportRenderer, "_render_with_browser", fake_render)
+    monkeypatch.setattr(export_renderer, "build_diagram_svg", Mock(side_effect=AssertionError))
+    monkeypatch.setattr(
+        export_renderer,
+        "get_settings",
+        lambda: SimpleNamespace(export=SimpleNamespace(render_timeout_ms=1_000)),
+    )
+
+    persisted_source = "flowchart TB\nthis is intentionally not canonical"
+    result = await export_renderer.ChromiumExportRenderer().render(
+        {"diagramData": payload, "mermaidSource": persisted_source},
+        ExportFormat.SVG,
+        ExportBackground.TRANSPARENT,
+    )
+
+    assert result == b"rendered"
+    assert calls["source"] == export_renderer.compile_mermaid(payload)
+    assert calls["format"] is ExportFormat.SVG
+    assert calls["background"] is ExportBackground.TRANSPARENT
+    assert calls["theme"] == export_renderer._MERMAID_THEME_VARIABLES["purple"]
+
+
+def test_rendered_content_allows_safe_mermaid_styles_and_labels():
+    content = (
+        b'<svg xmlns="http://www.w3.org/2000/svg" style="max-width: 140px;">'
+        b"<style>#flowchart{fill:#EEF5FF;} .label{animation:none;}</style>"
+        b'<foreignObject width="40" height="24">'
+        b'<div xmlns="http://www.w3.org/1999/xhtml" style="display:table-cell;">'
+        b'<span class="nodeLabel"><p>&#24320;&#22987;</p></span>'
+        b"</div></foreignObject></svg>"
+    )
+
+    assert export_renderer.is_valid_rendered_content(ExportFormat.SVG, content) is True
+    assert export_renderer.is_valid_rendered_content(
+        ExportFormat.SVG,
+        content.replace(b"display:table-cell", b"background:url(https://example.com/x)"),
+    ) is False
+
+
 def test_rendered_content_rejects_active_or_external_svg_content():
     assert export_renderer.is_valid_rendered_content(
         ExportFormat.SVG,
