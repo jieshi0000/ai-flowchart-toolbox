@@ -5,9 +5,8 @@
       "name": "Backend (local)",
       "type": "debugpy",
       "request": "launch",
-      "module": "src.app.main",
+      "module": "app.main",
       "cwd": "${workspaceFolder}/backend",
-      "python": "${workspaceFolder}/backend/.venv/bin/python",
       "env": {
         "APP_ENV": "local",
         "APP__DEBUG": "false"
@@ -23,7 +22,7 @@
       "type": "node",
       "request": "launch",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["-F", "@vben/my-app", "run", "dev"],
+      "runtimeArgs": ["dev"],
       "cwd": "${workspaceFolder}/frontend",
       "console": "integratedTerminal",
       "presentation": {

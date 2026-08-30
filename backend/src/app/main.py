@@ -6,6 +6,7 @@ from fastapi.routing import APIRoute
 from loguru import logger
 
 from app.core.config import get_settings
+from app.core.redis import close_redis
 from app.core.logging import setup_logging
 from app.middleware.logging import LoggingMiddleware
 from app.middleware.cors import add_cors
@@ -13,7 +14,13 @@ from app.exceptions.handlers import register_exception_handlers
 from app.api.demo_api import router as demo_router
 from app.api.auth_api import router as auth_router
 from app.api.public_api import router as public_router
+from app.api.provider_api import router as provider_router
+from app.api.task_api import router as task_router
+from app.api.template_api import router as template_router
+from app.api.document_api import router as document_router
+from app.api.file_api import router as file_router
 from app.middleware.auth import AuthMiddleware
+from app.providers.provider_registry import close_provider_registry
 
 setup_logging()
 settings = get_settings()
@@ -38,12 +45,25 @@ async def lifespan(app: FastAPI):
             logger.error("服务启动中止，请先修复迁移文件或手动执行后重试")
             raise
         logger.info("==================================================")
-    yield
+    try:
+        yield
+    finally:
+        await close_provider_registry()
+        await close_redis()
 
 
 app = FastAPI(title=settings.app.name, debug=settings.app.debug, lifespan=lifespan)
 
-for router in (demo_router, auth_router, public_router):
+for router in (
+    demo_router,
+    auth_router,
+    public_router,
+    provider_router,
+    template_router,
+    task_router,
+    document_router,
+    file_router,
+):
     for route in router.routes:
         if isinstance(route, APIRoute):
             route.response_model_by_alias = settings.app.json_camel_case
@@ -55,6 +75,11 @@ add_cors(app)
 app.include_router(demo_router, prefix="/api")
 app.include_router(auth_router, prefix="/api")
 app.include_router(public_router, prefix="/api")
+app.include_router(provider_router, prefix="/api")
+app.include_router(template_router, prefix="/api")
+app.include_router(task_router, prefix="/api")
+app.include_router(document_router, prefix="/api")
+app.include_router(file_router, prefix="/api")
 
 logger.info("Application startup", name=settings.app.name, debug=settings.app.debug)
 
@@ -63,7 +88,7 @@ if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(
-        "src.app.main:app",
+        "app.main:app",
         host=settings.app.host,
         port=settings.app.port,
         reload=settings.app.debug,

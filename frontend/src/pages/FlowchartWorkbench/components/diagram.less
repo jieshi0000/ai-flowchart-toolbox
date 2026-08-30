@@ -1,0 +1,381 @@
+.diagramCanvas {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 360px;
+  overflow: hidden;
+  background-color: #f9fbff;
+  background-image: radial-gradient(#d5e1f2 0.8px, transparent 0.8px);
+  background-size: 24px 24px;
+}
+
+.reactFlow {
+  width: 100%;
+  height: 100%;
+}
+
+.reactFlow :global(.react-flow__background) {
+  background: transparent;
+}
+
+.reactFlow :global(.react-flow__controls) {
+  overflow: hidden;
+  border: 1px solid #e4e9f1;
+  border-radius: 10px;
+  box-shadow: 0 8px 18px rgba(28, 48, 83, 0.1);
+}
+
+.reactFlow :global(.react-flow__controls-button) {
+  width: 30px;
+  height: 30px;
+  border-bottom-color: #e4e9f1;
+  background: #ffffff;
+  color: #63728a;
+}
+
+.reactFlow :global(.react-flow__minimap) {
+  overflow: hidden;
+  border: 1px solid #e4e9f1;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.92);
+}
+
+.canvasToolbar {
+  position: absolute;
+  z-index: 5;
+  top: 14px;
+  left: 14px;
+  display: flex;
+  max-width: calc(100% - 24px);
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+  overflow-x: auto;
+  border: 1px solid #e4e9f1;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 8px 18px rgba(28, 48, 83, 0.1);
+}
+
+.canvasToolbar :global(.ant-btn) {
+  flex: 0 0 auto;
+}
+
+.canvasToolbarLabel {
+  flex: 0 0 auto;
+  padding: 0 3px;
+  color: #536966;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.emptyCanvas {
+  position: absolute;
+  z-index: 4;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: min(360px, calc(100% - 32px));
+  justify-items: center;
+  gap: 9px;
+  padding: 22px;
+  transform: translate(-50%, -50%);
+  border: 1px dashed #b9d2ff;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.92);
+  color: #6f7d93;
+  text-align: center;
+}
+
+.emptyCanvasTitle {
+  color: #34415a;
+  font-weight: 700;
+}
+
+.canvasHint {
+  position: absolute;
+  z-index: 4;
+  right: 14px;
+  bottom: 12px;
+  max-width: min(330px, calc(100% - 28px));
+  padding: 5px 8px;
+  border: 1px solid #e4e9f1;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.88);
+  color: #8593a8;
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: right;
+}
+
+.nodeFrame {
+  position: relative;
+  display: grid;
+  width: 180px;
+  min-height: 68px;
+  place-items: center;
+}
+
+.nodeShell {
+  display: grid;
+  width: 168px;
+  min-height: 58px;
+  align-content: center;
+  justify-items: center;
+  gap: 2px;
+  padding: 9px 12px;
+  border: 1px solid var(--node-stroke);
+  background: var(--node-fill);
+  box-shadow: 0 4px 10px rgba(40, 100, 200, 0.06);
+  color: #24549e;
+  text-align: center;
+  transition: box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.nodeSelected .nodeShell {
+  box-shadow: 0 0 0 3px rgba(36, 107, 253, 0.2);
+}
+
+.start,
+.end {
+  border-radius: 999px;
+}
+
+.process {
+  border-radius: 10px;
+}
+
+.decision {
+  width: 124px;
+  min-height: 124px;
+  padding: 18px;
+  transform: rotate(45deg) scale(0.7);
+}
+
+.decision .nodeLabel,
+.decision .nodeTypeLabel {
+  transform: rotate(-45deg);
+}
+
+.input_output {
+  transform: skewX(-18deg);
+}
+
+.input_output .nodeLabel,
+.input_output .nodeTypeLabel {
+  transform: skewX(18deg);
+}
+
+.subprocess {
+  position: relative;
+  border-radius: 10px;
+}
+
+.subprocess::after {
+  position: absolute;
+  inset: 4px;
+  border: 1px solid var(--node-stroke);
+  border-radius: 6px;
+  content: '';
+  pointer-events: none;
+}
+
+.nodeTypeLabel {
+  color: #718198;
+  font-size: 10px;
+  line-height: 1.1;
+}
+
+.nodeLabel {
+  max-width: 142px;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.handle {
+  width: 9px;
+  height: 9px;
+  border: 2px solid #ffffff;
+  background: #246bfd;
+}
+
+.edgeEditor {
+  display: grid;
+  gap: 12px;
+  padding-top: 8px;
+}
+
+.edgeEditorLabel {
+  color: #61736f;
+  font-size: 12px;
+}
+
+.propertyPanel {
+  display: grid;
+  gap: 16px;
+}
+
+.propertySection {
+  display: grid;
+  gap: 8px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e5edeb;
+}
+
+.propertySectionHeader {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.propertySectionHeader > :global(.ant-typography) {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.propertyLabel {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+  color: #61736f;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.positionGrid,
+.colorGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.colorInput {
+  width: 100%;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid #cbdad8;
+  border-radius: 4px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.propertyActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.propertyEmpty {
+  display: grid;
+  min-height: 160px;
+  place-items: center;
+}
+
+.clearSelectionButton {
+  justify-self: start;
+  padding-inline: 0;
+}
+
+.edgeEndpoints {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+  border: 1px solid #dce5f1;
+  border-radius: 7px;
+  background: #f9fbff;
+  color: #24549e;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+}
+
+.mermaidPanel {
+  display: grid;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.mermaidDiagramPreview {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 280px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 10px;
+}
+
+.mermaidSvgViewport {
+  display: grid;
+  min-height: 0;
+  place-items: center;
+  padding: 24px;
+  overflow: auto;
+  border: 1px solid #dce5f1;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.mermaidSvgViewport :global(svg) {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 100%;
+}
+
+.mermaidDiagramState {
+  display: flex;
+  min-height: 120px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.mermaidSource :global(textarea) {
+  min-height: 180px;
+  resize: vertical;
+  color: #2f4642;
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.mermaidState {
+  display: flex;
+  min-height: 120px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.mermaidHint {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+@media (max-width: 760px) {
+  .diagramCanvas {
+    min-height: 330px;
+  }
+
+  .canvasToolbar {
+    top: 8px;
+    left: 8px;
+    max-width: calc(100% - 16px);
+  }
+
+  .canvasHint {
+    right: 8px;
+    bottom: 8px;
+  }
+
+  .mermaidSvgViewport {
+    padding: 14px;
+  }
+}

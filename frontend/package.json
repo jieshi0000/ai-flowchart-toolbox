@@ -2,8 +2,9 @@
   "private": true,
   "author": "xionghaoyu <1759893823@qq.com>",
   "scripts": {
-    "dev": "max dev",
+    "dev": "max dev --port 20105",
     "build": "max build",
+    "typecheck": "max setup && tsc --noEmit",
     "format": "prettier --cache --write .",
     "prepare": "husky",
     "postinstall": "max setup",
@@ -14,9 +15,15 @@
     "@ant-design/icons": "^5.0.1",
     "@ant-design/pro-components": "^2.4.4",
     "@umijs/max": "^4.6.83",
-    "antd": "^5.4.0"
+    "@xyflow/react": "12.11.2",
+    "antd": "^5.4.0",
+    "dagre": "^0.8.5",
+    "mermaid": "^11.16.1",
+    "zundo": "2.3.0",
+    "zustand": "5.0.14"
   },
   "devDependencies": {
+    "@types/dagre": "^0.7.54",
     "@types/react": "^18.0.33",
     "@types/react-dom": "^18.0.11",
     "husky": "^9",
@@ -25,5 +32,6 @@
     "prettier-plugin-organize-imports": "^3.2.2",
     "prettier-plugin-packagejson": "^2.4.3",
     "typescript": "^5.0.3"
-  }
+  },
+  "packageManager": "pnpm@11.19.0"
 }

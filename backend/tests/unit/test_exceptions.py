@@ -1,4 +1,5 @@
 from app.exceptions.business import BusinessException
+from app.exceptions.handlers import _validation_error_code
 
 
 class TestBusinessException:
@@ -25,3 +26,13 @@ class TestBusinessException:
         exc = BusinessException(message="库存不足")
         assert exc.code == 500
         assert exc.message == "库存不足"
+
+    def test_error_code(self):
+        exc = BusinessException(code=400, message="流程描述为空", error_code="PROMPT_EMPTY")
+        assert exc.error_code == "PROMPT_EMPTY"
+
+
+def test_prompt_validation_error_code_mapping():
+    assert _validation_error_code([{"loc": ("body", "prompt"), "type": "string_too_long"}]) == "PROMPT_TOO_LONG"
+    assert _validation_error_code([{"loc": ("body", "prompt"), "type": "value_error"}]) == "PROMPT_EMPTY"
+    assert _validation_error_code([{"loc": ("body", "prompt"), "type": "string_type"}]) is None

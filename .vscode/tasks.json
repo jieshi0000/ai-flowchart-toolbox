@@ -5,7 +5,7 @@
       "label": "backend:dev",
       "detail": "FastAPI + APP_ENV=local（.env + .env.local，含 auto_migrate）",
       "type": "shell",
-      "command": "uv run python -m src.app.main",
+      "command": "uv run python -m app.main",
       "options": {
         "cwd": "${workspaceFolder}/backend",
         "env": {
@@ -30,9 +30,9 @@
     },
     {
       "label": "frontend:dev",
-      "detail": "Vite development（.env.development）",
+      "detail": "Umi Max development（端口 20105）",
       "type": "shell",
-      "command": "pnpm -F @vben/my-app run dev",
+      "command": "pnpm dev",
       "options": {
         "cwd": "${workspaceFolder}/frontend"
       },

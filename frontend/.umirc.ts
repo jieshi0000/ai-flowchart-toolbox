@@ -11,33 +11,30 @@ export default defineConfig({
   },
   routes: [
     {
-      path: '/login',
-      layout: false,
-      component: './Login',
-    },
-    {
       path: '/401',
       layout: false,
       component: './401',
     },
     {
       path: '/',
-      redirect: '/home',
+      redirect: '/flowchart/workbench',
     },
     {
-      name: '首页',
-      path: '/home',
-      component: './Home',
+      name: '流程图工作台',
+      path: '/flowchart/workbench',
+      component: './FlowchartWorkbench',
     },
     {
       name: '权限演示',
       path: '/access',
       component: './Access',
+      hideInMenu: true,
     },
     {
       name: 'CRUD 示例',
       path: '/table',
       component: './Table',
+      hideInMenu: true,
     },
     {
       path: '*',
@@ -55,4 +52,3 @@ export default defineConfig({
     },
   },
 });
-

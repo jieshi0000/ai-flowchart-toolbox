@@ -1,0 +1,44 @@
+[
+  {
+    "providerId": "deepseek-official-chat",
+    "displayName": "deepseek-v4-flash",
+    "adapter": "openai_compatible",
+    "protocol": "openai_chat_completions",
+    "baseUrl": "https://api.deepseek.com",
+    "model": "deepseek-v4-flash",
+    "apiKeyEnv": "DEEPSEEK_API_KEY",
+    "capabilities": [
+      "text_generation",
+      "structured_output"
+    ],
+    "enabled": true,
+    "allowManualSelection": true,
+    "priority": 100,
+    "timeoutSeconds": 60,
+    "pollIntervalSeconds": 3,
+    "maxPollIntervalSeconds": 15,
+    "taskTimeoutSeconds": 600,
+    "maxOutputTokens": 16384
+  },
+  {
+    "providerId": "deepseek-official-responses",
+    "displayName": "deepseek-v4-flash",
+    "adapter": "openai_compatible",
+    "protocol": "openai_responses",
+    "baseUrl": "https://api.deepseek.com",
+    "model": "deepseek-v4-flash",
+    "apiKeyEnv": "DEEPSEEK_API_KEY",
+    "capabilities": [
+      "text_generation",
+      "structured_output"
+    ],
+    "enabled": true,
+    "allowManualSelection": true,
+    "priority": 90,
+    "timeoutSeconds": 60,
+    "pollIntervalSeconds": 3,
+    "maxPollIntervalSeconds": 15,
+    "taskTimeoutSeconds": 600,
+    "maxOutputTokens": 16384
+  }
+]

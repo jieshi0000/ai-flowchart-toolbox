@@ -1,6 +1,7 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 from fastapi import FastAPI
+from fastapi.routing import APIRoute
 
 from app.api.demo_api import router as demo_router
 from app.exceptions.handlers import register_exception_handlers
@@ -14,7 +15,10 @@ async def camel_client():
     register_exception_handlers(camel_app)
     camel_app.add_middleware(LoggingMiddleware)
     add_cors(camel_app)
-    camel_app.include_router(demo_router)
+    camel_app.include_router(demo_router, prefix="/api")
+    for route in camel_app.routes:
+        if isinstance(route, APIRoute):
+            route.response_model_by_alias = True
     transport = ASGITransport(app=camel_app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client

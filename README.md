@@ -6,38 +6,37 @@
 
 ## 快速开始
 
-默认账号: admin / admin123
+### 1. 启动本地全栈环境
 
-### 1. 启动中间件
-
-```bash
-docker compose -f docker-compose.dev.yml up -d
+```powershell
+# 首次使用：复制示例并填写仅限本机的凭据。
+# 若该文件不存在，才从示例创建；已有文件不要覆盖。
+if (-not (Test-Path docker-compose.local.env)) {
+  Copy-Item docker-compose.local.env.example docker-compose.local.env
+}
+# 无论新建还是已有文件，都必须填写示例中的所有必填 LOCAL_* 变量；留空会启动失败。
+# 编辑 docker-compose.local.env 后启动
+docker compose --env-file docker-compose.local.env -f docker-compose.local.yml up -d --build
 ```
 
-### 2. 初始化数据库权限
+该命令会启动前端、FastAPI、Celery Worker/Beat、PostgreSQL、Redis 与 MinIO，均位于项目内部 Docker 网络。
 
-> 仅在**首次启动中间件后**执行一次。若之前已启动过 PostgreSQL（数据卷已存在），init.sql 可能未执行，需要手动跑一次。
+访问 http://localhost:20105 即可直接进入流程图工作台（本地 Compose 已关闭登录校验）。健康检查地址为 http://localhost:10105/api/public/health 。
 
-```bash
-docker exec postgres psql -U app -d flowchart_toolbox_db -f /docker-entrypoint-initdb.d/init.sql
-```
+### 2. 本机分别启动（可选）
 
-### 3. 启动后端
-
-```bash
+```powershell
 cd backend
 uv sync
-APP_ENV=local uv run python -m src.app.main
-# PowerShell: $env:APP_ENV='local'; uv run python -m src.app.main
-# CMD: set APP_ENV=local && uv run python -m src.app.main
-# 首次启动会自动执行数据库迁移（建表+种子数据），后续启动幂等跳过
+$env:APP_ENV='local'; uv run python -m app.main
 
-### 4. 启动前端
-
-```bash
-cd frontend
+cd ..\frontend
 pnpm install
 pnpm dev
+pnpm run typecheck
+```
+
+本机后端需要可用的 PostgreSQL、Redis 与 MinIO；日常开发优先使用上面的完整 Compose 环境。
 ## VS Code 一键启动
 
 用 VS Code / Cursor 打开本仓库根目录后：
@@ -46,26 +45,27 @@ pnpm dev
 |------|------|
 | **Full Stack (local)** | 同时启后端 + 前端（推荐） |
 | **Backend (local)** | 仅后端（Python: `APP_ENV=local` / Java: `profile=local`） |
-| **Frontend (dev)** | 仅前端（Vite development） |
+| **Frontend (dev)** | 仅前端（Umi Max development，端口 20105） |
 
 - **Run and Debug**（F5）：选上面三个 launch 配置
 - **Terminal → Run Task**：`fullstack:dev` / `backend:dev` / `frontend:dev`
 
-首次前请先完成依赖安装（`backend` 下 `uv sync` 或 Maven；`frontend` 下 `pnpm install`）。
-Python 后端本地覆盖文件为 `backend/.env.local`（setup 已复制并默认 `DATABASE__AUTO_MIGRATE=true`）；Java 用 `application-local.yml`（setup 已从 `.example` 生成，localhost + `flyway.enabled=true`）+ `SPRING_PROFILES_ACTIVE=local`。
+首次前请先完成依赖安装（`backend` 下 `uv sync`；`frontend` 下 `pnpm install`）。分别启动时使用各目录下受忽略的 `.env.local` 私有覆盖；Compose 启动使用受忽略的 `docker-compose.local.env`，两者都禁止提交明文凭据。
 
 ## 本地开发
 
-```bash
-# 启动中间件
-docker compose -f docker-compose.dev.yml up -d
+```powershell
+# 启动完整本地环境
+docker compose --env-file docker-compose.local.env -f docker-compose.local.yml up -d --build
 
-# 停止中间件
-docker compose -f docker-compose.dev.yml down
+# 停止完整本地环境
+docker compose --env-file docker-compose.local.env -f docker-compose.local.yml down
 
 # 查看状态
-docker compose -f docker-compose.dev.yml ps
+docker compose --env-file docker-compose.local.env -f docker-compose.local.yml ps
 ```
+
+`docker-compose.local.env` 是受 Git 忽略的本机私有文件，必须由 `docker-compose.local.env.example` 复制后填写，禁止提交。Compose 模板不包含明文凭据，所有端口仅绑定到 `127.0.0.1`，仅限本地开发。
 
 ## 连通性测试
 
@@ -100,7 +100,7 @@ flowchart-toolbox/
 ├── docs/
 ├── docker-compose.yml       # 全栈部署（连接外部 infra-net）
 ├── docker-compose.dev.yml   # 本地开发中间件（PG + 选配 Redis/MinIO）
-├── docker-compose.infra.yml # 本项目独立中间件（可选）
+├── docker-compose.local.yml # Day 1 完整本地环境
 ├── .vscode/                 # launch / tasks（local 缺省）
 ├── deploy.sh                # 线上部署
 └── test-connectivity.sh
